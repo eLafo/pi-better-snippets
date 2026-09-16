@@ -7,7 +7,12 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import {
 	truncateToWidth,
+	type Component,
 	type KeyId,
+	type KeybindingsManager,
+	type OverlayHandle,
+	type OverlayOptions,
+	type TUI,
 	type TuiMouseEvent,
 	type TuiMouseEventResult,
 	visibleWidth,
@@ -48,13 +53,13 @@ export const TRANSLATIONS = {
 		emptySnippet: "(empty snippet)", emptyPreview: "(empty)", plainText: "text",
 		snippetUnavailable: "Snippet {number} is not available", copyByNumber: "Copy snippet by number", pressNumber: "Press {range}", cancel: "cancel", preview: "Preview", rows: "Rows", focus: "focus", select: "select", scroll: "scroll", copy: "copy",
 		copied: "Copied {language} snippet to the clipboard", copyFailed: "Could not copy the snippet{detail}", tuiOnly: "Snippet copying is only available in the interactive TUI", noSnippets: "The latest assistant response has no fenced snippets", usage: "Usage: /copy-snippet [number]", invalidIndex: "Invalid snippet number: {value}", invalidSnippet: "Snippet {value} does not exist (available: {available})", pickerFailed: "Could not open the snippet picker. Please try again", pickerRenderFailed: "Snippet preview unavailable. Press Esc to cancel", numberPromptRenderFailed: "Snippet number picker unavailable. Press Esc to cancel", invalidSelection: "Could not select that snippet. Please try again",
-		lineCountOne: "{count} line", lineCountMany: "{count} lines", snippetLabel: "{index}. {language} · {lines} — {preview}", promptHint: "{range} · {cancelKey} cancel", promptHintMany: "{range} · {command} · {cancelKey} cancel", keyPageUp: "PgUp", keyPageDown: "PgDn", keyEnter: "Enter", keyEscape: "Esc", keyUnbound: "unbound", keyTab: "Tab", keySpace: "Space", keyBackspace: "Backspace", keyDelete: "Delete", keyInsert: "Insert", keyClear: "Clear", keyHome: "Home", keyEnd: "End", keyUp: "↑", keyDown: "↓", keyLeft: "←", keyRight: "→", keyF1: "F1", keyF2: "F2", keyF3: "F3", keyF4: "F4", keyF5: "F5", keyF6: "F6", keyF7: "F7", keyF8: "F8", keyF9: "F9", keyF10: "F10", keyF11: "F11", keyF12: "F12", compactTitle: "Copy snippet · Preview", pickerTitle: "Copy snippet · {focus}", listFocus: "list", previewFocus: "preview", rangeOf: "{start}-{end} of {total}", previewLines: "lines {start}-{end}", compactFooter: "{arrows} scroll · {confirm} copy · {cancelKey} cancel", widgetOne: "{count} snippet · {shortcut} copy", widgetMany: "{count} snippets · {shortcut} → number", commandDescription: "Select and copy a fenced snippet from the latest assistant response", shortcutDescription: "Copy a fenced snippet by pressing its number",
+		lineCountOne: "{count} line", lineCountMany: "{count} lines", snippetLabel: "{index}. {language} · {lines} — {preview}", promptHint: "{range} · {cancelKey} cancel", promptHintMany: "{range} · {command} · {cancelKey} cancel", keyPageUp: "PgUp", keyPageDown: "PgDn", keyEnter: "Enter", keyEscape: "Esc", keyUnbound: "unbound", keyTab: "Tab", keySpace: "Space", keyBackspace: "Backspace", keyDelete: "Delete", keyInsert: "Insert", keyClear: "Clear", keyHome: "Home", keyEnd: "End", keyUp: "↑", keyDown: "↓", keyLeft: "←", keyRight: "→", keyF1: "F1", keyF2: "F2", keyF3: "F3", keyF4: "F4", keyF5: "F5", keyF6: "F6", keyF7: "F7", keyF8: "F8", keyF9: "F9", keyF10: "F10", keyF11: "F11", keyF12: "F12", compactTitle: "Copy snippet · Preview", pickerTitle: "Copy snippet · {focus}", listFocus: "list", previewFocus: "preview", rangeOf: "{start}-{end} of {total}", previewLines: "lines {start}-{end}", compactFooter: "{arrows} scroll · {confirm} copy · {cancelKey} cancel", widgetOne: "{count} snippet · {shortcut} copy · /copy-snippet fallback", widgetMany: "{count} snippets · {shortcut} → number · /copy-snippet fallback", commandDescription: "Select and copy a fenced snippet from the latest assistant response", shortcutDescription: "Copy a fenced snippet by pressing its number; /copy-snippet is always available",
 	},
 	es: {
 		emptySnippet: "(fragmento vacío)", emptyPreview: "(vacío)", plainText: "texto",
 		snippetUnavailable: "El fragmento {number} no está disponible", copyByNumber: "Copiar fragmento por número", pressNumber: "Pulsa {range}", cancel: "cancelar", preview: "Vista previa", rows: "Filas", focus: "foco", select: "seleccionar", scroll: "desplazar", copy: "copiar",
 		copied: "Fragmento {language} copiado al portapapeles", copyFailed: "No se pudo copiar el fragmento{detail}", tuiOnly: "La copia de fragmentos solo está disponible en la TUI interactiva", noSnippets: "La última respuesta del asistente no contiene fragmentos delimitados", usage: "Uso: /copy-snippet [número]", invalidIndex: "Número de fragmento no válido: {value}", invalidSnippet: "El fragmento {value} no existe (disponibles: {available})", pickerFailed: "No se pudo abrir el selector de fragmentos. Inténtalo de nuevo", pickerRenderFailed: "Vista previa no disponible. Pulsa Esc para cancelar", numberPromptRenderFailed: "Selector numérico no disponible. Pulsa Esc para cancelar", invalidSelection: "No se pudo seleccionar ese fragmento. Inténtalo de nuevo",
-		lineCountOne: "{count} línea", lineCountMany: "{count} líneas", snippetLabel: "{index}. {language} · {lines} — {preview}", promptHint: "{range} · {cancelKey} cancelar", promptHintMany: "{range} · {command} · {cancelKey} cancelar", keyPageUp: "RePág", keyPageDown: "AvPág", keyEnter: "Intro", keyEscape: "Esc", keyUnbound: "sin asignar", keyTab: "Tab", keySpace: "Espacio", keyBackspace: "Retroceso", keyDelete: "Supr", keyInsert: "Insert", keyClear: "Borrar", keyHome: "Inicio", keyEnd: "Fin", keyUp: "↑", keyDown: "↓", keyLeft: "←", keyRight: "→", keyF1: "F1", keyF2: "F2", keyF3: "F3", keyF4: "F4", keyF5: "F5", keyF6: "F6", keyF7: "F7", keyF8: "F8", keyF9: "F9", keyF10: "F10", keyF11: "F11", keyF12: "F12", compactTitle: "Copiar fragmento · Vista previa", pickerTitle: "Copiar fragmento · {focus}", listFocus: "lista", previewFocus: "vista previa", rangeOf: "{start}-{end} de {total}", previewLines: "líneas {start}-{end}", compactFooter: "{arrows} desplazar · {confirm} copiar · {cancelKey} cancelar", widgetOne: "{count} fragmento · {shortcut} copiar", widgetMany: "{count} fragmentos · {shortcut} → número", commandDescription: "Selecciona y copia un fragmento delimitado de la última respuesta del asistente", shortcutDescription: "Copia un fragmento delimitado pulsando su número",
+		lineCountOne: "{count} línea", lineCountMany: "{count} líneas", snippetLabel: "{index}. {language} · {lines} — {preview}", promptHint: "{range} · {cancelKey} cancelar", promptHintMany: "{range} · {command} · {cancelKey} cancelar", keyPageUp: "RePág", keyPageDown: "AvPág", keyEnter: "Intro", keyEscape: "Esc", keyUnbound: "sin asignar", keyTab: "Tab", keySpace: "Espacio", keyBackspace: "Retroceso", keyDelete: "Supr", keyInsert: "Insert", keyClear: "Borrar", keyHome: "Inicio", keyEnd: "Fin", keyUp: "↑", keyDown: "↓", keyLeft: "←", keyRight: "→", keyF1: "F1", keyF2: "F2", keyF3: "F3", keyF4: "F4", keyF5: "F5", keyF6: "F6", keyF7: "F7", keyF8: "F8", keyF9: "F9", keyF10: "F10", keyF11: "F11", keyF12: "F12", compactTitle: "Copiar fragmento · Vista previa", pickerTitle: "Copiar fragmento · {focus}", listFocus: "lista", previewFocus: "vista previa", rangeOf: "{start}-{end} de {total}", previewLines: "líneas {start}-{end}", compactFooter: "{arrows} desplazar · {confirm} copiar · {cancelKey} cancelar", widgetOne: "{count} fragmento · {shortcut} copiar · alternativa /copy-snippet", widgetMany: "{count} fragmentos · {shortcut} → número · alternativa /copy-snippet", commandDescription: "Selecciona y copia un fragmento delimitado de la última respuesta del asistente", shortcutDescription: "Copia un fragmento delimitado pulsando su número; /copy-snippet siempre está disponible",
 	},
 } satisfies Record<"en" | "es", TranslationCatalog>;
 
@@ -187,9 +192,9 @@ export function extractFencedCodeBlocks(markdown: string): CodeSnippet[] {
 
 const ANSI_SEQUENCE = /(\x1b\[[0-?]*[ -/]*[@-~])/g;
 const MARKDOWN_PUNCTUATION = /([!"#$%&'()*+,\-./:;<=>?@[\\\]^_`{|}~])/g;
-const UNSAFE_DISPLAY_CHARACTERS = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/gu;
-const EMOJI_BEFORE_ZWJ = /\p{Extended_Pictographic}(?:[\p{Emoji_Modifier}\p{M}\uFE0E\uFE0F])*$/u;
-const EMOJI_AFTER_ZWJ = /^(?:[\p{Emoji_Modifier}\p{M}\uFE0E\uFE0F])*\p{Extended_Pictographic}/u;
+const UNSAFE_DISPLAY_CHARACTERS = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/u;
+const EXTENDED_PICTOGRAPHIC = /^\p{Extended_Pictographic}$/u;
+const EMOJI_JOINER_MODIFIER = /^(?:\p{Emoji_Modifier}|\p{M}|\uFE0E|\uFE0F)$/u;
 const MAX_DISPLAY_MARKDOWN_GRAPHEMES = 128_000;
 const MAX_DISPLAY_CODE_GRAPHEMES = 16_384;
 const MAX_DISPLAY_LANGUAGE_GRAPHEMES = 64;
@@ -215,17 +220,70 @@ function truncateGraphemes(value: string, maximum: number, suffix = "…"): stri
 	return segments.join("");
 }
 
-function isSafeEmojiZwj(value: string, index: number): boolean {
-	return EMOJI_BEFORE_ZWJ.test(value.slice(0, index)) && EMOJI_AFTER_ZWJ.test(value.slice(index + 1));
+/** Limits display work even when one grapheme contains an unbounded run of combining marks. */
+function truncateDisplayCost(value: string, maximum: number): string {
+	let codeUnits = 0;
+	let codePoints = 0;
+	let end = 0;
+	let previousEnd = 0;
+	for (const codePoint of value) {
+		const nextCodeUnits = codeUnits + codePoint.length;
+		const nextCodePoints = codePoints + 1;
+		if (nextCodeUnits > maximum || nextCodePoints > maximum) {
+			if (codeUnits + 1 <= maximum && codePoints + 1 <= maximum) return value.slice(0, end) + "…";
+			return value.slice(0, previousEnd) + "…";
+		}
+		previousEnd = end;
+		end += codePoint.length;
+		codeUnits = nextCodeUnits;
+		codePoints = nextCodePoints;
+	}
+	return value;
+}
+
+/** A joiner is safe only when its complete grapheme is an emoji ZWJ sequence. */
+function isCompleteEmojiJoinerGrapheme(segment: string): boolean {
+	let sawPictograph = false;
+	let needsPictograph = false;
+	for (const character of segment) {
+		if (EXTENDED_PICTOGRAPHIC.test(character)) {
+			sawPictograph = true;
+			needsPictograph = false;
+			continue;
+		}
+		if (character === "\u200D") {
+			if (!sawPictograph || needsPictograph) return false;
+			needsPictograph = true;
+			continue;
+		}
+		if (!sawPictograph || !EMOJI_JOINER_MODIFIER.test(character)) return false;
+	}
+	return sawPictograph && !needsPictograph;
+}
+
+/** Sanitizes graphemes in linear time while retaining only complete emoji ZWJ sequences. */
+function sanitizeDisplayText(value: string): string {
+	const sanitized: string[] = [];
+	for (const { segment } of GRAPHEME_SEGMENTER.segment(value)) {
+		const preserveJoiners = segment.includes("\u200D") && isCompleteEmojiJoinerGrapheme(segment);
+		for (const character of segment) {
+			sanitized.push(
+				character === "\n" ||
+				(character === "\u200D" && preserveJoiners) ||
+				!UNSAFE_DISPLAY_CHARACTERS.test(character)
+					? character
+					: "�",
+			);
+		}
+	}
+	return sanitized.join("");
 }
 
 /** Converts untrusted assistant text into bounded terminal-safe display text without changing stored snippets. */
 function displayText(value: string, maximum: number): string {
-	const normalized = value.replaceAll(/\r\n|\r/g, "\n").replaceAll("\t", "    ");
-	const sanitized = normalized.replace(UNSAFE_DISPLAY_CHARACTERS, (character, index) =>
-		character === "\n" || (character === "\u200D" && isSafeEmojiZwj(normalized, index)) ? character : "�"
-	);
-	return truncateGraphemes(sanitized, maximum);
+	const source = truncateDisplayCost(value, maximum);
+	const normalized = source.replaceAll(/\r\n|\r/g, "\n").replaceAll("\t", "    ");
+	return truncateGraphemes(truncateDisplayCost(sanitizeDisplayText(normalized), maximum), maximum);
 }
 
 function displayLanguage(language: string | undefined, locale?: string): string {
@@ -256,7 +314,8 @@ function isValidSnippetSelection(value: unknown, snippetCount: number): value is
 }
 
 function highlightLanguage(language: string | undefined): string | undefined {
-	return language && HIGHLIGHT_LANGUAGES.has(language.toLowerCase()) ? language.toLowerCase() : undefined;
+	const safeLanguage = language && displayText(language, MAX_DISPLAY_LANGUAGE_GRAPHEMES).toLowerCase();
+	return safeLanguage && HIGHLIGHT_LANGUAGES.has(safeLanguage) ? safeLanguage : undefined;
 }
 
 function escapeMarkdownOutsideAnsi(value: string): string {
@@ -278,7 +337,7 @@ function decoratedSnippet(snippet: CodeSnippet, snippetIndex: number, width: num
 		const truncated = truncateToWidth(value, targetWidth, "");
 		return truncated + " ".repeat(Math.max(0, targetWidth - visibleWidth(truncated)));
 	};
-	if (panelWidth < 4) {
+	if (panelWidth < 5) {
 		return visualLines.map((line) => escapeMarkdownOutsideAnsi(fit(line, panelWidth))).join("\n");
 	}
 
@@ -551,8 +610,10 @@ export class SnippetPicker {
 
 	handleMouse(event: TuiMouseEvent): TuiMouseEventResult | undefined {
 		if (event.type === "wheel") {
+			const delta = event.wheelDelta;
+			if (typeof delta !== "number" || !Number.isFinite(delta) || delta === 0) return undefined;
 			this.setFocus("preview");
-			this.scrollPreview(event.wheelDelta && event.wheelDelta < 0 ? -3 : 3);
+			this.scrollPreview(delta);
 			return { handled: true, focus: true, render: true };
 		}
 		if (event.type !== "click" || event.button !== "left") return undefined;
@@ -725,8 +786,8 @@ export class SnippetPicker {
 
 export default function betterSnippetsExtension(pi: ExtensionAPI, locale?: string) {
 	let latestSnippets: CodeSnippet[] = [];
-	let pickerOpen = false;
 	let conversationTheme: Theme | undefined;
+	let activePicker: { cancel(): void } | undefined;
 
 	pi.registerMarkdownTransformer((markdown, context) => {
 		if (context.messageType !== "assistant") return markdown;
@@ -751,6 +812,65 @@ export default function betterSnippetsExtension(pi: ExtensionAPI, locale?: strin
 			}),
 			{ placement: "belowEditor" },
 		);
+	};
+
+	const cancelOpenPicker = () => activePicker?.cancel();
+
+	const openPicker = async (
+		ctx: ExtensionContext,
+		create: (tui: TUI, theme: Theme, keybindings: KeybindingsManager, done: (value: unknown) => void) => Component & { dispose?(): void },
+		overlayOptions: OverlayOptions,
+	): Promise<unknown> => {
+		let done: ((value: unknown) => void) | undefined;
+		let handle: OverlayHandle | undefined;
+		let component: (Component & { dispose?(): void }) | undefined;
+		let settled = false;
+		let cancelled = false;
+		const finish = (value: unknown) => {
+			if (settled) return;
+			settled = true;
+			done?.(value);
+		};
+		const operation = {
+			cancel: () => {
+				if (cancelled) return;
+				cancelled = true;
+				try { handle?.hide(); } catch { /* Teardown must not leave a pending picker. */ }
+				try { component?.dispose?.(); } catch { /* The host owns component disposal errors. */ }
+				finish(undefined);
+			},
+		};
+		activePicker = operation;
+		try {
+			const result = await ctx.ui.custom<unknown>(
+				(tui, theme, keybindings, resolve) => {
+					done = resolve;
+					component = create(tui, theme, keybindings, finish);
+					if (cancelled) {
+						try { component.dispose?.(); } catch { /* Teardown must not throw into Pi. */ }
+						resolve(undefined);
+					}
+					return component;
+				},
+				{
+					overlay: true,
+					overlayOptions,
+					onHandle: (nextHandle) => {
+						handle = nextHandle;
+						if (cancelled) {
+							try { handle.hide(); } catch { /* Teardown must not throw into Pi. */ }
+						}
+					},
+				},
+			);
+			return cancelled ? undefined : result;
+		} finally {
+			if (activePicker === operation) activePicker = undefined;
+		}
+	};
+
+	const requestRender = (tui: TUI) => {
+		try { tui.requestRender(); } catch { /* Rendering can recover on the next host refresh. */ }
 	};
 
 	const copySnippet = async (snippet: CodeSnippet, ctx: ExtensionContext) => {
@@ -785,7 +905,7 @@ export default function betterSnippetsExtension(pi: ExtensionAPI, locale?: strin
 	};
 
 	const chooseAndCopy = async (ctx: ExtensionContext, requestedIndex?: RequestedSnippetIndex) => {
-		if (pickerOpen || !canCopy(ctx)) return;
+		if (activePicker || !canCopy(ctx)) return;
 		const snippets = availableSnippets(ctx);
 		if (notifyIfEmpty(snippets, ctx)) return;
 
@@ -801,48 +921,29 @@ export default function betterSnippetsExtension(pi: ExtensionAPI, locale?: strin
 			return;
 		}
 
-		pickerOpen = true;
+		let selectedIndex: unknown;
 		try {
-			let selectedIndex: unknown;
-			try {
-				selectedIndex = await ctx.ui.custom<unknown>(
-					(tui, theme, keybindings, done) => new SnippetPicker(
-						snippets,
-						theme,
-						keybindings,
-						() => tui.terminal.rows,
-						done,
-						() => tui.requestRender(),
-						locale,
-					),
-					{
-						overlay: true,
-						overlayOptions: {
-							anchor: "center",
-							width: "90%",
-							minWidth: 60,
-							maxHeight: MAX_OVERLAY_HEIGHT,
-							margin: 0,
-						},
-					},
-				);
-			} catch {
-				ctx.ui.notify(translate("pickerFailed", locale), "error");
-				return;
-			}
-			if (selectedIndex === undefined) return;
-			if (!isValidSnippetSelection(selectedIndex, snippets.length)) {
-				ctx.ui.notify(translate("invalidSelection", locale), "error");
-				return;
-			}
-			await copySnippet(snippets[selectedIndex], ctx);
-		} finally {
-			pickerOpen = false;
+			selectedIndex = await openPicker(
+				ctx,
+				(tui, theme, keybindings, done) => new SnippetPicker(
+					snippets, theme, keybindings, () => tui.terminal.rows, done, () => requestRender(tui), locale,
+				),
+				{ anchor: "center", width: "90%", minWidth: 60, maxHeight: MAX_OVERLAY_HEIGHT, margin: 0 },
+			);
+		} catch {
+			ctx.ui.notify(translate("pickerFailed", locale), "error");
+			return;
 		}
+		if (selectedIndex === undefined) return;
+		if (!isValidSnippetSelection(selectedIndex, snippets.length)) {
+			ctx.ui.notify(translate("invalidSelection", locale), "error");
+			return;
+		}
+		await copySnippet(snippets[selectedIndex], ctx);
 	};
 
 	const quickCopyByNumber = async (ctx: ExtensionContext) => {
-		if (pickerOpen || !canCopy(ctx)) return;
+		if (activePicker || !canCopy(ctx)) return;
 		const snippets = availableSnippets(ctx);
 		if (notifyIfEmpty(snippets, ctx)) return;
 		if (snippets.length === 1) {
@@ -850,42 +951,25 @@ export default function betterSnippetsExtension(pi: ExtensionAPI, locale?: strin
 			return;
 		}
 
-		pickerOpen = true;
+		let selectedIndex: unknown;
 		try {
-			let selectedIndex: unknown;
-			try {
-				selectedIndex = await ctx.ui.custom<unknown>(
-					(tui, theme, keybindings, done) => new SnippetNumberPrompt(
-						snippets.length,
-						theme,
-						keybindings,
-						done,
-						() => tui.requestRender(),
-						locale,
-					),
-					{
-						overlay: true,
-						overlayOptions: {
-							anchor: "center",
-							width: 48,
-							maxHeight: 5,
-							margin: 0,
-						},
-					},
-				);
-			} catch {
-				ctx.ui.notify(translate("pickerFailed", locale), "error");
-				return;
-			}
-			if (selectedIndex === undefined) return;
-			if (!isValidSnippetSelection(selectedIndex, snippets.length)) {
-				ctx.ui.notify(translate("invalidSelection", locale), "error");
-				return;
-			}
-			await copySnippet(snippets[selectedIndex], ctx);
-		} finally {
-			pickerOpen = false;
+			selectedIndex = await openPicker(
+				ctx,
+				(tui, theme, keybindings, done) => new SnippetNumberPrompt(
+					snippets.length, theme, keybindings, done, () => requestRender(tui), locale,
+				),
+				{ anchor: "center", width: 48, maxHeight: 5, margin: 0 },
+			);
+		} catch {
+			ctx.ui.notify(translate("pickerFailed", locale), "error");
+			return;
 		}
+		if (selectedIndex === undefined) return;
+		if (!isValidSnippetSelection(selectedIndex, snippets.length)) {
+			ctx.ui.notify(translate("invalidSelection", locale), "error");
+			return;
+		}
+		await copySnippet(snippets[selectedIndex], ctx);
 	};
 
 	pi.on("session_start", (_event, ctx) => {
@@ -894,7 +978,12 @@ export default function betterSnippetsExtension(pi: ExtensionAPI, locale?: strin
 		refreshIndicator(ctx);
 	});
 
+	pi.on("session_before_tree", () => {
+		cancelOpenPicker();
+	});
+
 	pi.on("session_tree", (_event, ctx) => {
+		cancelOpenPicker();
 		latestSnippets = latestAssistantSnippets(ctx.sessionManager.getBranch());
 		refreshIndicator(ctx);
 	});
@@ -906,7 +995,7 @@ export default function betterSnippetsExtension(pi: ExtensionAPI, locale?: strin
 	});
 
 	pi.on("session_shutdown", (_event, ctx) => {
-		pickerOpen = false;
+		cancelOpenPicker();
 		latestSnippets = [];
 		conversationTheme = undefined;
 		ctx.ui.setWidget(INDICATOR_KEY, undefined);
@@ -930,6 +1019,7 @@ export default function betterSnippetsExtension(pi: ExtensionAPI, locale?: strin
 		},
 	});
 
+	// Pi resolves shortcut conflicts after registration and exposes no result; the widget always shows /copy-snippet as a fallback.
 	pi.registerShortcut(SHORTCUT, {
 		description: translate("shortcutDescription", locale),
 		handler: async (ctx) => quickCopyByNumber(ctx),

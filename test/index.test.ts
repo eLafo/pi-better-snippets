@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { type KeyId, visibleWidth } from "@earendil-works/pi-tui";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -191,6 +193,43 @@ describe("fenced snippet parsing", () => {
 
 	it("does not form a fence across separate assistant text blocks", () => {
 		expect(snippetsFromAssistantMessage(assistant("```ts\nconst x = 1;", "```"))).toEqual([]);
+	});
+
+	it("extracts many mixed fences and preserves large and extreme bodies", () => {
+		const fences = Array.from({ length: 64 }, (_, index) => {
+			const marker = index % 2 ? "~~~" : "````";
+			return `${marker}${index % 2 ? "bash" : "ts"}\nblock-${index}\n${marker}`;
+		}).join("\nlabel outside\n");
+		const largeBody = Array.from({ length: 256 }, () => "x".repeat(4_096)).join("\n");
+		const extremeLine = "z".repeat(50_000);
+		const parsed = extractFencedCodeBlocks(`${fences}\n\`\`\`text\n${largeBody}\n\`\`\`\n~~~text\n${extremeLine}\n~~~`);
+
+		expect(parsed).toHaveLength(66);
+		expect(parsed.slice(0, 64).map((snippet) => snippet.code)).toEqual(Array.from({ length: 64 }, (_, index) => `block-${index}`));
+		expect(parsed[64]?.code).toBe(largeBody);
+		expect(parsed[65]?.code).toBe(extremeLine);
+	});
+
+	it("keeps the distributed skill's labeled backtick and tilde output parser-compatible", () => {
+		const skill = readFileSync(resolve(process.cwd(), "skills/copyable-snippets/SKILL.md"), "utf8");
+		expect(skill).toContain("each independently usable snippet in its own fenced Markdown block");
+		expect(skill).toContain("place it as a short plain-text label immediately before its block");
+		const output = "src/demo.ts\n```ts\nexport const answer = 42;\n```\nconfig/example\n~~~json\n{\"ok\":true}\n~~~";
+		expect(extractFencedCodeBlocks(output).map(({ language, code }) => ({ language, code }))).toEqual([
+			{ language: "ts", code: "export const answer = 42;" },
+			{ language: "json", code: "{\"ok\":true}" },
+		]);
+	});
+
+	it("keeps decorated fence rows within widths one through five", () => {
+		const theme = {
+			fg: (_color: string, text: string) => text,
+			bg: (_color: string, text: string) => text,
+		} as any;
+		for (let width = 1; width <= 5; width++) {
+			const rows = decorateAssistantSnippets("```text\nwide\n```", width, theme).split("\n");
+			expect(rows.every((row) => visibleWidth(row) <= width)).toBe(true);
+		}
 	});
 
 	it("decorates complete fences as themed code panels without fence markers", () => {
@@ -519,6 +558,37 @@ describe("hostile assistant display values", () => {
 		}
 	});
 
+	it("sanitizes large repeated joiners linearly while retaining complete family emoji", () => {
+		const family = "👨‍👩‍👧‍👦";
+		const isolatedJoiners = "\u200D".repeat(8_000);
+		const familyCount = 500;
+		const code = `${isolatedJoiners}${family.repeat(familyCount)}`;
+		const markdown = `\`\`\`text\n${code}\n\`\`\``;
+		const rendered = decorateAssistantSnippets(markdown, 20, theme);
+		const highlightedCode = highlightCode.mock.calls.at(-1)![0] as string;
+
+		expect(highlightedCode).toHaveLength(code.length);
+		expect(highlightedCode.split("\u200D")).toHaveLength(familyCount * 3 + 1);
+		expect(highlightedCode).toContain("�".repeat(100));
+		expect(rendered.length).toBeLessThan(100_000);
+	});
+
+	it("bounds a pathological combining cluster without splitting surrogate pairs", () => {
+		const pathological = `😀${"\u0301".repeat(100_000)}`;
+		const markdown = `\`\`\`ts\n${pathological}\n\`\`\``;
+		const rendered = decorateAssistantSnippets(markdown, 20, theme);
+		const highlightedCode = highlightCode.mock.calls.at(-1)![0] as string;
+		const unmatchedSurrogate = /(?:[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF])/u;
+
+		expect(highlightedCode.length).toBeLessThanOrEqual(16_384);
+		expect(Array.from(highlightedCode).length).toBeLessThanOrEqual(16_384);
+		expect(highlightedCode).not.toMatch(unmatchedSurrogate);
+		expect(rendered.length).toBeLessThan(100_000);
+		const picker = new SnippetPicker([extractFencedCodeBlocks(markdown)[0]!], theme, keybindings as any, () => 24, vi.fn());
+		picker.render(20);
+		expect((highlightCode.mock.calls.at(-1)![0] as string).length).toBeLessThanOrEqual(16_384);
+	});
+
 	it("bounds highlighting, language labels, and picker rows", () => {
 		const invalidLanguage = `typescript-${"x".repeat(200)}\x1b[31m`;
 		const hugeCode = "x".repeat(20_000);
@@ -633,6 +703,25 @@ describe("snippet picker", () => {
 		expect(onChange).toHaveBeenCalledTimes(4);
 	});
 
+	it("uses signed logical wheel deltas and ignores absent or zero deltas", () => {
+		const code = Array.from({ length: 40 }, (_, index) => `line ${index + 1}`).join("\n");
+		const picker = new SnippetPicker([{ code, info: "text", language: "text", startLine: 1, endLine: 42 }], theme, keybindings as any, () => 24, vi.fn());
+		picker.render(72);
+		expect(picker.getFocus()).toBe("list");
+		expect(picker.handleMouse({ type: "wheel" } as any)).toBeUndefined();
+		expect(picker.handleMouse({ type: "wheel", wheelDelta: 0 } as any)).toBeUndefined();
+		expect(picker.getFocus()).toBe("list");
+		expect(picker.getPreviewOffset()).toBe(0);
+		expect(picker.handleMouse({ type: "wheel", wheelDelta: 5 } as any)).toEqual({ handled: true, focus: true, render: true });
+		expect(picker.getPreviewOffset()).toBe(5);
+		picker.handleMouse({ type: "wheel", wheelDelta: 7 } as any);
+		expect(picker.getPreviewOffset()).toBe(12);
+		picker.handleMouse({ type: "wheel", wheelDelta: -3 } as any);
+		expect(picker.getPreviewOffset()).toBe(9);
+		picker.handleMouse({ type: "wheel", wheelDelta: -50 } as any);
+		expect(picker.getPreviewOffset()).toBe(0);
+	});
+
 	it("supports mouse selection and double-click confirmation", () => {
 		const done = vi.fn();
 		const picker = new SnippetPicker(snippets, theme, keybindings as any, () => 24, done);
@@ -676,6 +765,27 @@ describe("snippet picker", () => {
 			.toBeUndefined();
 		expect(picker.getSelection()).toBe(0);
 		expect(done).not.toHaveBeenCalled();
+	});
+
+	it("sweeps narrow and expanded widths with tabs, wide Unicode, and resize changes", () => {
+		const longUnicode = [{
+			code: `\t界 emoji 👨‍👩‍👧‍👦 cafe\u0301 עברית العربية ${"x".repeat(200)}\n${Array.from({ length: 20 }, (_, index) => `line ${index}`).join("\n")}`,
+			info: "text", language: "text", startLine: 1, endLine: 23,
+		}];
+		let rows = 24;
+		const picker = new SnippetPicker(longUnicode, theme, keybindings as any, () => rows, vi.fn());
+		for (let width = 1; width <= 20; width++) {
+			expect(picker.render(width).every((row) => visibleWidth(row) <= width)).toBe(true);
+		}
+		expect(picker.render(20).every((row) => visibleWidth(row) <= 20)).toBe(true);
+		expect(picker.render(80).every((row) => visibleWidth(row) <= 80)).toBe(true);
+		rows = 8;
+		expect(picker.render(20).length).toBeLessThanOrEqual(8);
+		rows = 24;
+		const expanded = picker.render(80);
+		expect(expanded.length).toBeGreaterThan(8);
+		expect(expanded.length).toBeLessThanOrEqual(24);
+		expect(expanded.every((row) => visibleWidth(row) <= 80)).toBe(true);
 	});
 
 	it("wraps long lines so the entire content can be previewed", () => {
@@ -794,6 +904,91 @@ describe("extension integration", () => {
 		await pending;
 
 		expect(copyToClipboard).toHaveBeenLastCalledWith("two");
+	});
+
+	it("cancels open picker dialogs on tree changes and every shutdown reason", async () => {
+		const theme = { bold: (text: string) => text, fg: (_color: string, text: string) => text, bg: (_color: string, text: string) => text };
+		const installDeferredDialog = (ctx: ReturnType<typeof createContext>) => {
+			const handle = { hide: vi.fn() };
+			let component: SnippetPicker | SnippetNumberPrompt | undefined;
+			(ctx.ui.custom as any).mockImplementationOnce((factory: any, options: any) => new Promise((resolve) => {
+				component = factory({ requestRender: vi.fn(), terminal: { rows: 30 } }, theme, createKeybindings(), resolve);
+				options.onHandle(handle);
+			}));
+			return { handle, get component() { return component; } };
+		};
+
+		let entries: unknown[] = [entry(assistant("```ts\none\n```\n```json\ntwo\n```"))];
+		const treeContext = createContext(entries);
+		treeContext.sessionManager.getBranch = () => entries;
+		const treeDialog = installDeferredDialog(treeContext);
+		const copiesBeforeTree = copyToClipboard.mock.calls.length;
+		const treePending = shortcuts.get("ctrl+shift+c")!.handler(treeContext);
+		await vi.waitFor(() => expect(treeContext.ui.custom).toHaveBeenCalledOnce());
+		entries = [entry(assistant("no snippets"))];
+		await emit("session_before_tree", { signal: new AbortController().signal }, treeContext);
+		await emit("session_tree", {}, treeContext);
+		treeDialog.component?.handleInput("2");
+		await treePending;
+		expect(treeDialog.handle.hide).toHaveBeenCalledOnce();
+		expect(copyToClipboard.mock.calls).toHaveLength(copiesBeforeTree);
+		expect(treeContext.ui.setWidget).toHaveBeenLastCalledWith("better-snippets", undefined);
+		entries = [entry(assistant("```ts\nfresh\n```"))];
+		await commands.get("copy-snippet")!.handler("", treeContext);
+		expect(copyToClipboard).toHaveBeenLastCalledWith("fresh");
+
+		for (const reason of ["quit", "reload", "new", "resume", "fork"] as const) {
+			const ctx = createContext([entry(assistant("```ts\none\n```"))]);
+			const dialog = installDeferredDialog(ctx);
+			const copiesBeforeShutdown = copyToClipboard.mock.calls.length;
+			const pending = commands.get("copy-snippet")!.handler("", ctx);
+			await vi.waitFor(() => expect(ctx.ui.custom).toHaveBeenCalledOnce());
+			await emit("session_shutdown", { reason }, ctx);
+			await pending;
+			expect(dialog.handle.hide).toHaveBeenCalledOnce();
+			expect(copyToClipboard.mock.calls).toHaveLength(copiesBeforeShutdown);
+			expect(ctx.ui.setWidget).toHaveBeenLastCalledWith("better-snippets", undefined);
+			await commands.get("copy-snippet")!.handler("1", ctx);
+			expect(copyToClipboard).toHaveBeenLastCalledWith("one");
+		}
+	});
+
+	it("contains request-render failures from an open picker and permits recovery", async () => {
+		const ctx = createContext([entry(assistant("```ts\none\n```"))]);
+		let installed!: SnippetPicker;
+		(ctx.ui.custom as any).mockImplementationOnce((factory: any) => new Promise((resolve) => {
+			installed = factory(
+				{ requestRender: () => { throw new Error("render unavailable"); }, terminal: { rows: 30 } },
+				{ bold: (text: string) => text, fg: (_color: string, text: string) => text, bg: (_color: string, text: string) => text },
+				createKeybindings(),
+				resolve,
+			);
+		}));
+		const copiesBefore = copyToClipboard.mock.calls.length;
+		const pending = commands.get("copy-snippet")!.handler("", ctx);
+		await vi.waitFor(() => expect(ctx.ui.custom).toHaveBeenCalledOnce());
+		expect(() => installed.handleInput("\t")).not.toThrow();
+		installed.handleInput("\x1b");
+		await pending;
+		expect(copyToClipboard.mock.calls).toHaveLength(copiesBefore);
+		await commands.get("copy-snippet")!.handler("1", ctx);
+		expect(copyToClipboard).toHaveBeenLastCalledWith("one");
+	});
+
+	it("registers the Pi shortcut without a collision query and keeps the command fallback usable", async () => {
+		const registered: Array<{ key: string; description: string }> = [];
+		let command!: Command;
+		const localPi = {
+			on: () => undefined,
+			registerCommand: (_name: string, value: Command) => { command = value; },
+			registerShortcut: (key: string, value: { description: string }) => { registered.push({ key, description: value.description }); },
+			registerMarkdownTransformer: () => undefined,
+		} as unknown as ExtensionAPI;
+		extension(localPi, "en");
+		expect(registered).toEqual([{ key: "ctrl+shift+c", description: "Copy a fenced snippet by pressing its number; /copy-snippet is always available" }]);
+		const ctx = createContext([entry(assistant("```ts\nfallback\n```"))]);
+		await command.handler("1", ctx);
+		expect(copyToClipboard).toHaveBeenLastCalledWith("fallback");
 	});
 
 	it("reports missing snippets, invalid indices, and clipboard failures", async () => {
@@ -989,13 +1184,13 @@ describe("extension integration", () => {
 		const factory = ctx.ui.setWidget.mock.calls.at(-1)![1];
 		const dim = vi.fn((_color: string, text: string) => `<dim>${text}</dim>`);
 		const component = factory({}, { fg: dim });
-		expect(component.render(80)).toEqual(["<dim>2 snippets · ctrl+shift+c → number</dim>"]);
-		expect(dim).toHaveBeenCalledWith("dim", "2 snippets · ctrl+shift+c → number");
+		expect(component.render(80)).toEqual(["<dim>2 snippets · ctrl+shift+c → number · /copy-snippet fallback</dim>"]);
+		expect(dim).toHaveBeenCalledWith("dim", "2 snippets · ctrl+shift+c → number · /copy-snippet fallback");
 
 		await emit("message_end", { message: assistant("```bash\necho ok\n```") }, ctx);
 		const singularFactory = ctx.ui.setWidget.mock.calls.at(-1)![1];
 		expect(singularFactory({}, { fg: dim }).render(80))
-			.toEqual(["<dim>1 snippet · ctrl+shift+c copy</dim>"]);
+			.toEqual(["<dim>1 snippet · ctrl+shift+c copy · /copy-snippet fallback</dim>"]);
 
 		await emit("message_end", { message: assistant("No snippets") }, ctx);
 		expect(ctx.ui.setWidget).toHaveBeenLastCalledWith("better-snippets", undefined);

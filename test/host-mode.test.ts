@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 const cwd = process.cwd();
 const cliPath = resolve(cwd, "node_modules/@earendil-works/pi-coding-agent/dist/bundle/cli.js");
 const extensionPath = resolve(cwd, "index.ts");
+const conflictExtensionPath = resolve(cwd, "test/fixtures/shortcut-conflict.ts");
 const headlessError = "Snippet copying is only available in the interactive TUI";
 const commonArgs = [
 	"--offline",
@@ -23,6 +24,18 @@ function runPi(args: string[], input?: string) {
 		input,
 		timeout: 15_000,
 	});
+}
+
+function runInteractivePi(args: string[]) {
+	const command = [process.execPath, cliPath, ...args];
+	const scriptArgs = process.platform === "darwin"
+		? ["-q", "/dev/null", ...command]
+		: ["-q", "-c", command.map((part) => JSON.stringify(part)).join(" "), "/dev/null"];
+	return spawnSync("script", scriptArgs, { cwd, encoding: "utf8", timeout: 15_000, stdio: ["ignore", "pipe", "pipe"] });
+}
+
+function stripTerminalControls(value: string): string {
+	return value.replace(/\x1b(?:\[[0-?]*[ -/]*[@-~]|\][^\x07]*(?:\x07|\x1b\\)|_[^\x1b]*\x1b\\)/g, "").replaceAll("\r", "");
 }
 
 describe("installed Pi headless command dispatch", () => {
@@ -63,5 +76,26 @@ describe("installed Pi headless command dispatch", () => {
 				success: true,
 			}));
 		}
+	});
+});
+
+describe.skipIf(process.platform === "win32")("installed Pi interactive shortcut arbitration", () => {
+	it("reports this extension as the losing registration while its command fallback remains loaded", () => {
+		const collisionArgs = [
+			...commonArgs,
+			"--extension", conflictExtensionPath,
+		];
+		const interactive = runInteractivePi(collisionArgs);
+		expect(interactive.error).toBeUndefined();
+		expect(interactive.status).toBe(0);
+		const terminal = stripTerminalControls(`${interactive.stdout}${interactive.stderr}`);
+		expect(terminal).toContain("Extension shortcut conflict: 'ctrl+shift+c' registered by both");
+		expect(terminal).toContain(extensionPath);
+		expect(terminal.replace(/\s+/g, "")).toContain(`Using${conflictExtensionPath}.`);
+
+		const fallback = runPi(["--print", ...collisionArgs, "--", "/copy-snippet 1"]);
+		expect(fallback.error).toBeUndefined();
+		expect(fallback.status).toBe(0);
+		expect(fallback.stderr).toContain(`Extension error (command:copy-snippet): ${headlessError}`);
 	});
 });
