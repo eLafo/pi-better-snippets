@@ -17,44 +17,91 @@ import {
 const INDICATOR_KEY = "better-snippets";
 const SHORTCUT = "ctrl+shift+c";
 
-type MessageKey =
-	| "emptySnippet"
-	| "snippetUnavailable"
-	| "copyByNumber"
-	| "pressNumber"
-	| "cancel"
-	| "preview"
-	| "rows"
-	| "focus"
-	| "select"
-	| "scroll"
-	| "copy"
-	| "copied"
-	| "copyFailed"
-	| "tuiOnly"
-	| "noSnippets"
-	| "usage"
-	| "invalidIndex"
-	| "pickerFailed"
-	| "pickerRenderFailed"
-	| "numberPromptRenderFailed"
-	| "invalidSelection";
+type MessageArgs = {
+	emptySnippet: never; emptyPreview: never; plainText: never;
+	snippetUnavailable: { number: number }; copyByNumber: never; pressNumber: { range: string };
+	cancel: never; preview: never; rows: never; focus: never; select: never; scroll: never; copy: never;
+	copied: { language: string }; copyFailed: { detail: string }; tuiOnly: never; noSnippets: never;
+	usage: never; invalidIndex: { value: string }; invalidSnippet: { value: string; available: string };
+	pickerFailed: never; pickerRenderFailed: never; numberPromptRenderFailed: never; invalidSelection: never;
+	lineCountOne: { count: number }; lineCountMany: { count: number };
+	snippetLabel: { index: number; language: string; lines: string; preview: string };
+	promptHint: { range: string; cancelKey: string }; promptHintMany: { range: string; command: string; cancelKey: string };
+	keyPageUp: never; keyPageDown: never; keyEnter: never; keyEscape: never; keyUnbound: never;
+	keyTab: never; keySpace: never; keyBackspace: never; keyDelete: never; keyInsert: never; keyClear: never; keyHome: never; keyEnd: never;
+	keyUp: never; keyDown: never; keyLeft: never; keyRight: never;
+	keyF1: never; keyF2: never; keyF3: never; keyF4: never; keyF5: never; keyF6: never; keyF7: never; keyF8: never; keyF9: never; keyF10: never; keyF11: never; keyF12: never;
+	compactTitle: never; pickerTitle: { focus: string }; listFocus: never; previewFocus: never;
+	rangeOf: { start: number; end: number; total: number }; previewLines: { start: number; end: number };
+	compactFooter: { arrows: string; confirm: string; cancelKey: string };
+	widgetOne: { count: number; shortcut: string }; widgetMany: { count: number; shortcut: string };
+	commandDescription: never; shortcutDescription: never;
+};
+type MessageKey = keyof MessageArgs;
+type MessageKeyWithArgs = { [K in MessageKey]: MessageArgs[K] extends never ? never : K }[MessageKey];
+type MessageKeyWithoutArgs = Exclude<MessageKey, MessageKeyWithArgs>;
 
-const TRANSLATIONS: Record<"en" | "es", Record<MessageKey, string>> = {
+type TranslationCatalog = { [K in MessageKey]: string };
+/** Complete source catalog; validateTranslations verifies interpolation contracts. */
+export const TRANSLATIONS = {
 	en: {
-		emptySnippet: "(empty snippet)", snippetUnavailable: "Snippet {number} is not available", copyByNumber: "Copy snippet by number", pressNumber: "Press {range}", cancel: "cancel", preview: "Preview", rows: "Rows", focus: "focus", select: "select", scroll: "scroll", copy: "copy", copied: "Copied {language} snippet to the clipboard", copyFailed: "Could not copy the snippet{detail}", tuiOnly: "Snippet copying is only available in the interactive TUI", noSnippets: "The latest assistant response has no fenced snippets", usage: "Usage: /copy-snippet [number]", invalidIndex: "Invalid snippet number: {value}", pickerFailed: "Could not open the snippet picker. Please try again", pickerRenderFailed: "Snippet preview unavailable. Press Esc to cancel", numberPromptRenderFailed: "Snippet number picker unavailable. Press Esc to cancel", invalidSelection: "Could not select that snippet. Please try again",
+		emptySnippet: "(empty snippet)", emptyPreview: "(empty)", plainText: "text",
+		snippetUnavailable: "Snippet {number} is not available", copyByNumber: "Copy snippet by number", pressNumber: "Press {range}", cancel: "cancel", preview: "Preview", rows: "Rows", focus: "focus", select: "select", scroll: "scroll", copy: "copy",
+		copied: "Copied {language} snippet to the clipboard", copyFailed: "Could not copy the snippet{detail}", tuiOnly: "Snippet copying is only available in the interactive TUI", noSnippets: "The latest assistant response has no fenced snippets", usage: "Usage: /copy-snippet [number]", invalidIndex: "Invalid snippet number: {value}", invalidSnippet: "Snippet {value} does not exist (available: {available})", pickerFailed: "Could not open the snippet picker. Please try again", pickerRenderFailed: "Snippet preview unavailable. Press Esc to cancel", numberPromptRenderFailed: "Snippet number picker unavailable. Press Esc to cancel", invalidSelection: "Could not select that snippet. Please try again",
+		lineCountOne: "{count} line", lineCountMany: "{count} lines", snippetLabel: "{index}. {language} · {lines} — {preview}", promptHint: "{range} · {cancelKey} cancel", promptHintMany: "{range} · {command} · {cancelKey} cancel", keyPageUp: "PgUp", keyPageDown: "PgDn", keyEnter: "Enter", keyEscape: "Esc", keyUnbound: "unbound", keyTab: "Tab", keySpace: "Space", keyBackspace: "Backspace", keyDelete: "Delete", keyInsert: "Insert", keyClear: "Clear", keyHome: "Home", keyEnd: "End", keyUp: "↑", keyDown: "↓", keyLeft: "←", keyRight: "→", keyF1: "F1", keyF2: "F2", keyF3: "F3", keyF4: "F4", keyF5: "F5", keyF6: "F6", keyF7: "F7", keyF8: "F8", keyF9: "F9", keyF10: "F10", keyF11: "F11", keyF12: "F12", compactTitle: "Copy snippet · Preview", pickerTitle: "Copy snippet · {focus}", listFocus: "list", previewFocus: "preview", rangeOf: "{start}-{end} of {total}", previewLines: "lines {start}-{end}", compactFooter: "{arrows} scroll · {confirm} copy · {cancelKey} cancel", widgetOne: "{count} snippet · {shortcut} copy", widgetMany: "{count} snippets · {shortcut} → number", commandDescription: "Select and copy a fenced snippet from the latest assistant response", shortcutDescription: "Copy a fenced snippet by pressing its number",
 	},
 	es: {
-		emptySnippet: "(fragmento vacío)", snippetUnavailable: "El fragmento {number} no está disponible", copyByNumber: "Copiar fragmento por número", pressNumber: "Pulsa {range}", cancel: "cancelar", preview: "Vista previa", rows: "Filas", focus: "foco", select: "seleccionar", scroll: "desplazar", copy: "copiar", copied: "Fragmento {language} copiado al portapapeles", copyFailed: "No se pudo copiar el fragmento{detail}", tuiOnly: "La copia de fragmentos solo está disponible en la TUI interactiva", noSnippets: "La última respuesta del asistente no contiene fragmentos delimitados", usage: "Uso: /copy-snippet [número]", invalidIndex: "Número de fragmento no válido: {value}", pickerFailed: "No se pudo abrir el selector de fragmentos. Inténtalo de nuevo", pickerRenderFailed: "Vista previa no disponible. Pulsa Esc para cancelar", numberPromptRenderFailed: "Selector numérico no disponible. Pulsa Esc para cancelar", invalidSelection: "No se pudo seleccionar ese fragmento. Inténtalo de nuevo",
+		emptySnippet: "(fragmento vacío)", emptyPreview: "(vacío)", plainText: "texto",
+		snippetUnavailable: "El fragmento {number} no está disponible", copyByNumber: "Copiar fragmento por número", pressNumber: "Pulsa {range}", cancel: "cancelar", preview: "Vista previa", rows: "Filas", focus: "foco", select: "seleccionar", scroll: "desplazar", copy: "copiar",
+		copied: "Fragmento {language} copiado al portapapeles", copyFailed: "No se pudo copiar el fragmento{detail}", tuiOnly: "La copia de fragmentos solo está disponible en la TUI interactiva", noSnippets: "La última respuesta del asistente no contiene fragmentos delimitados", usage: "Uso: /copy-snippet [número]", invalidIndex: "Número de fragmento no válido: {value}", invalidSnippet: "El fragmento {value} no existe (disponibles: {available})", pickerFailed: "No se pudo abrir el selector de fragmentos. Inténtalo de nuevo", pickerRenderFailed: "Vista previa no disponible. Pulsa Esc para cancelar", numberPromptRenderFailed: "Selector numérico no disponible. Pulsa Esc para cancelar", invalidSelection: "No se pudo seleccionar ese fragmento. Inténtalo de nuevo",
+		lineCountOne: "{count} línea", lineCountMany: "{count} líneas", snippetLabel: "{index}. {language} · {lines} — {preview}", promptHint: "{range} · {cancelKey} cancelar", promptHintMany: "{range} · {command} · {cancelKey} cancelar", keyPageUp: "RePág", keyPageDown: "AvPág", keyEnter: "Intro", keyEscape: "Esc", keyUnbound: "sin asignar", keyTab: "Tab", keySpace: "Espacio", keyBackspace: "Retroceso", keyDelete: "Supr", keyInsert: "Insert", keyClear: "Borrar", keyHome: "Inicio", keyEnd: "Fin", keyUp: "↑", keyDown: "↓", keyLeft: "←", keyRight: "→", keyF1: "F1", keyF2: "F2", keyF3: "F3", keyF4: "F4", keyF5: "F5", keyF6: "F6", keyF7: "F7", keyF8: "F8", keyF9: "F9", keyF10: "F10", keyF11: "F11", keyF12: "F12", compactTitle: "Copiar fragmento · Vista previa", pickerTitle: "Copiar fragmento · {focus}", listFocus: "lista", previewFocus: "vista previa", rangeOf: "{start}-{end} de {total}", previewLines: "líneas {start}-{end}", compactFooter: "{arrows} desplazar · {confirm} copiar · {cancelKey} cancelar", widgetOne: "{count} fragmento · {shortcut} copiar", widgetMany: "{count} fragmentos · {shortcut} → número", commandDescription: "Selecciona y copia un fragmento delimitado de la última respuesta del asistente", shortcutDescription: "Copia un fragmento delimitado pulsando su número",
 	},
+} satisfies Record<"en" | "es", TranslationCatalog>;
+
+const MESSAGE_PLACEHOLDERS: { [K in MessageKey]: readonly (keyof MessageArgs[K])[] } = {
+	emptySnippet: [], emptyPreview: [], plainText: [], snippetUnavailable: ["number"], copyByNumber: [], pressNumber: ["range"], cancel: [], preview: [], rows: [], focus: [], select: [], scroll: [], copy: [], copied: ["language"], copyFailed: ["detail"], tuiOnly: [], noSnippets: [], usage: [], invalidIndex: ["value"], invalidSnippet: ["value", "available"], pickerFailed: [], pickerRenderFailed: [], numberPromptRenderFailed: [], invalidSelection: [], lineCountOne: ["count"], lineCountMany: ["count"], snippetLabel: ["index", "language", "lines", "preview"], promptHint: ["range", "cancelKey"], promptHintMany: ["range", "command", "cancelKey"], keyPageUp: [], keyPageDown: [], keyEnter: [], keyEscape: [], keyUnbound: [], keyTab: [], keySpace: [], keyBackspace: [], keyDelete: [], keyInsert: [], keyClear: [], keyHome: [], keyEnd: [], keyUp: [], keyDown: [], keyLeft: [], keyRight: [], keyF1: [], keyF2: [], keyF3: [], keyF4: [], keyF5: [], keyF6: [], keyF7: [], keyF8: [], keyF9: [], keyF10: [], keyF11: [], keyF12: [], compactTitle: [], pickerTitle: ["focus"], listFocus: [], previewFocus: [], rangeOf: ["start", "end", "total"], previewLines: ["start", "end"], compactFooter: ["arrows", "confirm", "cancelKey"], widgetOne: ["count", "shortcut"], widgetMany: ["count", "shortcut"], commandDescription: [], shortcutDescription: [],
 };
 
-/** Resolves UI text from the system locale; pass a locale to test or embed another translation. */
-export function translate(key: MessageKey, values: Record<string, string | number> = {}, locale?: string): string {
-	const resolvedLocale = locale ?? Intl.DateTimeFormat().resolvedOptions().locale;
-	const language = resolvedLocale.toLowerCase().startsWith("es") ? "es" : "en";
-	return TRANSLATIONS[language][key].replace(/\{(\w+)\}/g, (_match, name: string) => String(values[name] ?? ""));
+function resolveLanguage(locale?: string): "en" | "es" {
+	const candidate = locale ?? Intl.DateTimeFormat().resolvedOptions().locale;
+	try {
+		const language = Intl.getCanonicalLocales(candidate)[0]?.split("-", 1)[0]?.toLowerCase();
+		return language === "es" ? "es" : "en";
+	} catch {
+		return "en";
+	}
 }
+
+/** Throws when a catalog has missing, extra, duplicated, or unmatched interpolation placeholders. */
+export function validateTranslations(catalog: Record<"en" | "es", TranslationCatalog> = TRANSLATIONS): void {
+	for (const language of ["en", "es"] as const) for (const key of Object.keys(MESSAGE_PLACEHOLDERS) as MessageKey[]) {
+		const template = catalog[language][key];
+		if (typeof template !== "string") throw new Error(`Missing ${language} translation for ${key}`);
+		const placeholders = template.match(/\{(\w+)\}/g)?.map((value) => value.slice(1, -1)) ?? [];
+		const expected = MESSAGE_PLACEHOLDERS[key] as readonly string[];
+		if (placeholders.length !== expected.length || expected.some((name) => placeholders.filter((value) => value === name).length !== 1)) {
+			throw new Error(`Invalid ${language} translation placeholders for ${key}`);
+		}
+	}
+}
+
+function translateImplementation(key: MessageKey, values: Record<string, string | number>, locale?: string): string {
+	const template = TRANSLATIONS[resolveLanguage(locale)][key];
+	const expected = new Set(template.match(/\{(\w+)\}/g)?.map((value) => value.slice(1, -1)));
+	if (Object.keys(values).some((name) => !expected.has(name)) || [...expected].some((name) => !Object.hasOwn(values, name))) {
+		throw new Error(`Invalid interpolation values for ${key}`);
+	}
+	return template.replace(/\{(\w+)\}/g, (_match, name: string) => String(values[name]));
+}
+
+/** Resolves UI text with canonical en/es locale selection and checked interpolation values. */
+export function translate<K extends MessageKeyWithoutArgs>(key: K, locale?: string): string;
+export function translate<K extends MessageKeyWithArgs>(key: K, values: MessageArgs[K], locale?: string): string;
+export function translate(key: MessageKey, valuesOrLocale?: Record<string, string | number> | string, locale?: string): string {
+	return translateImplementation(key, typeof valuesOrLocale === "string" ? {} : valuesOrLocale ?? {}, typeof valuesOrLocale === "string" ? valuesOrLocale : locale);
+}
+
+validateTranslations();
 
 export interface CodeSnippet {
 	code: string;
@@ -181,12 +228,19 @@ function displayText(value: string, maximum: number): string {
 	return truncateGraphemes(sanitized, maximum);
 }
 
-function displayLanguage(language: string | undefined): string {
-	return displayText(language || "text", MAX_DISPLAY_LANGUAGE_GRAPHEMES);
+function displayLanguage(language: string | undefined, locale?: string): string {
+	return displayText(language || translate("plainText", locale), MAX_DISPLAY_LANGUAGE_GRAPHEMES);
 }
 
 function displayIndexDiagnostic(value: string): string {
 	return displayText(value, MAX_INDEX_DIAGNOSTIC_GRAPHEMES).replaceAll("\n", "↵");
+}
+
+function boundedRows(rows: string[], width: number): string[] {
+	const availableWidth = typeof width === "number" && Number.isFinite(width)
+		? Math.max(1, Math.floor(width))
+		: 1;
+	return rows.map((row) => truncateToWidth(row, availableWidth, ""));
 }
 
 /** Parses only canonical, exactly representable positive integer command indexes. */
@@ -211,14 +265,14 @@ function escapeMarkdownOutsideAnsi(value: string): string {
 	).join("");
 }
 
-function decoratedSnippet(snippet: CodeSnippet, snippetIndex: number, width: number, theme: Theme): string {
+function decoratedSnippet(snippet: CodeSnippet, snippetIndex: number, width: number, theme: Theme, locale?: string): string {
 	const panelWidth = Math.max(1, width);
 	const bodyWidth = Math.max(1, panelWidth - 2);
 	const codeWidth = Math.max(1, bodyWidth - 2);
 	const code = displayText(snippet.code, MAX_DISPLAY_CODE_GRAPHEMES);
 	const highlightedLines = code
 		? highlightCode(code, highlightLanguage(snippet.language))
-		: [theme.fg("mdCodeBlock", translate("emptySnippet"))];
+		: [theme.fg("mdCodeBlock", translate("emptySnippet", locale))];
 	const visualLines = highlightedLines.flatMap((line) => wrapTextWithAnsi(line || " ", codeWidth));
 	const fit = (value: string, targetWidth: number) => {
 		const truncated = truncateToWidth(value, targetWidth, "");
@@ -228,7 +282,7 @@ function decoratedSnippet(snippet: CodeSnippet, snippetIndex: number, width: num
 		return visualLines.map((line) => escapeMarkdownOutsideAnsi(fit(line, panelWidth))).join("\n");
 	}
 
-	const language = displayLanguage(snippet.language);
+	const language = displayLanguage(snippet.language, locale);
 	const label = ` [${snippetIndex + 1}] ${language} `;
 	const top = theme.fg(
 		"borderMuted",
@@ -244,7 +298,7 @@ function decoratedSnippet(snippet: CodeSnippet, snippetIndex: number, width: num
 }
 
 /** Decorate complete assistant code fences for display without changing stored Markdown. */
-export function decorateAssistantSnippets(markdown: string, availableWidth: number, theme: Theme): string {
+export function decorateAssistantSnippets(markdown: string, availableWidth: number, theme: Theme, locale?: string): string {
 	const displayMarkdown = displayText(markdown, MAX_DISPLAY_MARKDOWN_GRAPHEMES);
 	const snippets = extractFencedCodeBlocks(displayMarkdown);
 	if (snippets.length === 0) return displayMarkdown;
@@ -256,7 +310,7 @@ export function decorateAssistantSnippets(markdown: string, availableWidth: numb
 		const opener = lines[snippet.startLine - 1]!;
 		const closer = lines[snippet.endLine - 1]!;
 		const trailingLineEnding = displayMarkdown.slice(closer.contentEnd, closer.end);
-		const replacement = decoratedSnippet(snippet, index, availableWidth, theme) + trailingLineEnding;
+		const replacement = decoratedSnippet(snippet, index, availableWidth, theme, locale) + trailingLineEnding;
 		decorated = decorated.slice(0, opener.start) + replacement + decorated.slice(closer.end);
 	}
 	return decorated;
@@ -295,15 +349,22 @@ function lineCount(code: string): number {
 	return code ? code.split(/\r\n|\n|\r/).length : 0;
 }
 
-function preview(code: string): string {
-	const firstContentLine = displayText(code, MAX_DISPLAY_CODE_GRAPHEMES).split("\n").find((line) => line.trim())?.trim() || "(empty)";
+function preview(code: string, locale?: string): string {
+	const firstContentLine = displayText(code, MAX_DISPLAY_CODE_GRAPHEMES).split("\n").find((line) => line.trim())?.trim() || translate("emptyPreview", locale);
 	return truncateGraphemes(firstContentLine, MAX_PREVIEW_GRAPHEMES);
 }
 
-export function snippetLabel(snippet: CodeSnippet, index: number): string {
-	const language = displayLanguage(snippet.language);
-	const lines = lineCount(snippet.code);
-	return `${index + 1}. ${language} · ${lines} ${lines === 1 ? "line" : "lines"} — ${preview(snippet.code)}`;
+export function snippetLabel(snippet: CodeSnippet, index: number, locale?: string): string {
+	const count = lineCount(snippet.code);
+	const lines = count === 1
+		? translate("lineCountOne", { count }, locale)
+		: translate("lineCountMany", { count }, locale);
+	return translate("snippetLabel", {
+		index: index + 1,
+		language: displayLanguage(snippet.language, locale),
+		lines,
+		preview: preview(snippet.code, locale),
+	}, locale);
 }
 
 const MAX_VISIBLE_SNIPPETS = 6;
@@ -324,6 +385,29 @@ interface PickerKeybindings {
 	getKeys(keybinding: PickerKeybinding): KeyId[];
 }
 
+const NAMED_KEY_MESSAGES: Record<string, MessageKeyWithoutArgs> = {
+	escape: "keyEscape", esc: "keyEscape", enter: "keyEnter", return: "keyEnter", tab: "keyTab",
+	space: "keySpace", backspace: "keyBackspace", delete: "keyDelete", insert: "keyInsert", clear: "keyClear", home: "keyHome", end: "keyEnd",
+	pageUp: "keyPageUp", pageDown: "keyPageDown", up: "keyUp", down: "keyDown", left: "keyLeft", right: "keyRight",
+	f1: "keyF1", f2: "keyF2", f3: "keyF3", f4: "keyF4", f5: "keyF5", f6: "keyF6", f7: "keyF7", f8: "keyF8", f9: "keyF9", f10: "keyF10", f11: "keyF11", f12: "keyF12",
+};
+
+/** Formats named Pi-TUI keys while leaving literal keys and modifier notation conventional. */
+export function formatKeyId(key: KeyId, locale?: string): string {
+	const modifiers: string[] = [];
+	let base = key as string;
+	let prefix: RegExpMatchArray | null;
+	while ((prefix = base.match(/^(ctrl|shift|alt|super)\+/))) {
+		modifiers.push(prefix[1]!);
+		base = base.slice(prefix[0].length);
+	}
+	// A KeyId always has a base key, but retain malformed values rather than rendering an empty key label.
+	if (!base) return key;
+	const messageKey = NAMED_KEY_MESSAGES[base];
+	const label = messageKey ? translate(messageKey, locale) : base;
+	return [...modifiers.map((modifier) => modifier[0]!.toUpperCase() + modifier.slice(1)), label].join("+");
+}
+
 export class SnippetNumberPrompt {
 	private error: string | undefined;
 
@@ -333,6 +417,7 @@ export class SnippetNumberPrompt {
 		private readonly keybindings: Pick<PickerKeybindings, "matches">,
 		private readonly done: (index: number | undefined) => void,
 		private readonly onChange: () => void = () => undefined,
+		private readonly locale?: string,
 	) {}
 
 	handleInput(data: string): void {
@@ -341,13 +426,13 @@ export class SnippetNumberPrompt {
 
 		const index = Number(data) - 1;
 		if (index < this.snippetCount) return this.done(index);
-		this.error = translate("snippetUnavailable", { number: index + 1 });
+		this.error = translate("snippetUnavailable", { number: index + 1 }, this.locale);
 		this.onChange();
 	}
 
 	render(width: number): string[] {
 		try {
-			return this.renderContent(width);
+			return boundedRows(this.renderContent(width), width);
 		} catch {
 			return this.renderFallback(width);
 		}
@@ -357,7 +442,7 @@ export class SnippetNumberPrompt {
 		const availableWidth = typeof width === "number" && Number.isFinite(width)
 			? Math.max(1, Math.floor(width))
 			: 1;
-		return [translate("numberPromptRenderFailed").slice(0, availableWidth)];
+		return [translate("numberPromptRenderFailed", this.locale).slice(0, availableWidth)];
 	}
 
 	private renderContent(width: number): string[] {
@@ -369,12 +454,14 @@ export class SnippetNumberPrompt {
 		const row = (value = "") => this.theme.fg("border", "│") + fit(value) + this.theme.fg("border", "│");
 		const directCount = Math.min(9, this.snippetCount);
 		const range = directCount === 1 ? "1" : `1-${directCount}`;
+		const press = translate("pressNumber", { range }, this.locale);
+		const cancelKey = translate("keyEscape", this.locale);
 		const hint = this.snippetCount > 9
-			? ` ${translate("pressNumber", { range })} · /copy-snippet 10+ · Esc ${translate("cancel")}`
-			: ` ${translate("pressNumber", { range })} · Esc ${translate("cancel")}`;
+			? ` ${translate("promptHintMany", { range: press, command: "/copy-snippet 10+", cancelKey }, this.locale)}`
+			: ` ${translate("promptHint", { range: press, cancelKey }, this.locale)}`;
 		return [
 			this.theme.fg("border", `╭${"─".repeat(innerWidth)}╮`),
-			row(` ${this.theme.fg("accent", this.theme.bold(translate("copyByNumber")))}`),
+			row(` ${this.theme.fg("accent", this.theme.bold(translate("copyByNumber", this.locale)))}`),
 			row(` ${this.theme.fg("dim", hint.trimStart())}`),
 			...(this.error ? [row(` ${this.theme.fg("error", this.error)}`)] : []),
 			this.theme.fg("border", `╰${"─".repeat(innerWidth)}╯`),
@@ -403,6 +490,7 @@ export class SnippetPicker {
 		private readonly getMaxRows: () => number,
 		private readonly done: (index: number | undefined) => void,
 		private readonly onChange: () => void = () => undefined,
+		private readonly locale?: string,
 	) {}
 
 	getSelection(): number {
@@ -486,7 +574,7 @@ export class SnippetPicker {
 		const code = displayText(selected.code, MAX_DISPLAY_CODE_GRAPHEMES);
 		const codeLines = code
 			? highlightCode(code, highlightLanguage(selected.language))
-			: [this.theme.fg("mdCodeBlock", translate("emptySnippet"))];
+			: [this.theme.fg("mdCodeBlock", translate("emptySnippet", this.locale))];
 		const numberWidth = String(codeLines.length).length;
 		const codeWidth = Math.max(1, innerWidth - numberWidth - 5);
 		return codeLines.flatMap((code, sourceIndex) => {
@@ -499,24 +587,12 @@ export class SnippetPicker {
 	}
 
 	private keyLabel(keybinding: PickerKeybinding): string {
-		const names: Record<string, string> = {
-			up: "↑",
-			down: "↓",
-			pageUp: "PgUp",
-			pageDown: "PgDn",
-			enter: "Enter",
-			return: "Enter",
-			escape: "Esc",
-		};
-		const format = (key: string) => key.split("+").map((part) =>
-			names[part] ?? (part.length === 1 ? part.toUpperCase() : part[0]!.toUpperCase() + part.slice(1))
-		).join("+");
-		return this.keybindings.getKeys(keybinding).map(format).join("/") || "unbound";
+		return this.keybindings.getKeys(keybinding).map((key) => formatKeyId(key, this.locale)).join("/") || translate("keyUnbound", this.locale);
 	}
 
 	render(width: number): string[] {
 		try {
-			return this.renderContent(width);
+			return boundedRows(this.renderContent(width), width);
 		} catch {
 			return this.renderFallback(width);
 		}
@@ -526,7 +602,7 @@ export class SnippetPicker {
 		const availableWidth = typeof width === "number" && Number.isFinite(width)
 			? Math.max(1, Math.floor(width))
 			: 1;
-		return [translate("pickerRenderFailed").slice(0, availableWidth)];
+		return [translate("pickerRenderFailed", this.locale).slice(0, availableWidth)];
 	}
 
 	private renderContent(width: number): string[] {
@@ -571,10 +647,14 @@ export class SnippetPicker {
 			this.previewOffset = Math.min(this.previewOffset, Math.max(0, this.previewTotalRows - 1));
 			const codeRow = visualCodeRows[this.previewOffset]!;
 			return [
-				row(` ${this.theme.fg("accent", this.theme.bold("Copy snippet · preview"))} ${this.theme.fg("dim", `${this.previewOffset + 1}/${this.previewTotalRows}`)}`),
-				row(` ${snippetLabel(selected, this.selectedIndex)}`),
+				row(` ${this.theme.fg("accent", this.theme.bold(translate("compactTitle", this.locale)))} ${this.theme.fg("dim", `${this.previewOffset + 1}/${this.previewTotalRows}`)}`),
+				row(` ${snippetLabel(selected, this.selectedIndex, this.locale)}`),
 				backgroundRow(` ${codeRow.code}`),
-				row(` ${this.theme.fg("dim", `${this.keyLabel("tui.select.up")}/${this.keyLabel("tui.select.down")} scroll · ${this.keyLabel("tui.select.confirm")} copy · ${this.keyLabel("tui.select.cancel")} cancel`)}`),
+				row(` ${this.theme.fg("dim", translate("compactFooter", {
+					arrows: `${this.keyLabel("tui.select.up")}/${this.keyLabel("tui.select.down")}`,
+					confirm: this.keyLabel("tui.select.confirm"),
+					cancelKey: this.keyLabel("tui.select.cancel"),
+				}, this.locale))}`),
 			].slice(0, availableRows);
 		}
 
@@ -589,7 +669,9 @@ export class SnippetPicker {
 
 		const lines: string[] = [
 			this.theme.fg("border", `╭${"─".repeat(innerWidth)}╮`),
-			row(` ${this.theme.fg("accent", this.theme.bold(`Copy snippet · ${this.focus}`))}`),
+			row(` ${this.theme.fg("accent", this.theme.bold(translate("pickerTitle", {
+				focus: translate(this.focus === "list" ? "listFocus" : "previewFocus", this.locale),
+			}, this.locale)))}`),
 			rule(),
 		];
 
@@ -598,19 +680,23 @@ export class SnippetPicker {
 		this.actualListRows = visibleSnippets.length;
 		for (let relativeIndex = 0; relativeIndex < visibleSnippets.length; relativeIndex++) {
 			const index = this.listOffset + relativeIndex;
-			const label = snippetLabel(visibleSnippets[relativeIndex]!, index);
+			const label = snippetLabel(visibleSnippets[relativeIndex]!, index, this.locale);
 			lines.push(row(index === this.selectedIndex
 				? this.theme.bg("selectedBg", this.theme.fg("accent", ` › ${label}`))
 				: `   ${label}`));
 		}
 		if (showListStatus) {
-			lines.push(row(` ${this.theme.fg("dim", `${this.listOffset + 1}-${this.listOffset + visibleSnippets.length} of ${this.snippets.length}`)}`));
+			lines.push(row(` ${this.theme.fg("dim", translate("rangeOf", {
+				start: this.listOffset + 1, end: this.listOffset + visibleSnippets.length, total: this.snippets.length,
+			}, this.locale))}`));
 		}
 
 		lines.push(rule());
 		const selected = this.snippets[this.selectedIndex]!;
-		const language = displayLanguage(selected.language);
-		lines.push(panelBoundary(true, `${translate("preview")} · ${language} · lines ${selected.startLine}-${selected.endLine}`));
+		const language = displayLanguage(selected.language, this.locale);
+		lines.push(panelBoundary(true, `${translate("preview", this.locale)} · ${language} · ${translate("previewLines", {
+			start: selected.startLine, end: selected.endLine,
+		}, this.locale)}`));
 		const visualCodeRows = this.visualCodeRows(panelInnerWidth);
 		this.previewStartRow = lines.length;
 		this.previewEndRow = this.previewStartRow + this.previewVisibleRows;
@@ -624,10 +710,12 @@ export class SnippetPicker {
 				: codePanelRow());
 		}
 		const lastVisibleRow = Math.min(this.previewTotalRows, this.previewOffset + this.previewVisibleRows);
-		lines.push(panelBoundary(false, `${translate("rows")} ${this.previewOffset + 1}-${lastVisibleRow} of ${this.previewTotalRows}`));
+		lines.push(panelBoundary(false, `${translate("rows", this.locale)} ${translate("rangeOf", {
+			start: this.previewOffset + 1, end: lastVisibleRow, total: this.previewTotalRows,
+		}, this.locale)}`));
 		lines.push(rule());
-		const arrowAction = this.focus === "list" ? translate("select") : translate("scroll");
-		lines.push(row(` ${this.theme.fg("dim", `${this.keyLabel("tui.input.tab")} ${translate("focus")} · ${this.keyLabel("tui.select.up")}/${this.keyLabel("tui.select.down")} ${arrowAction} · ${this.keyLabel("tui.select.confirm")} ${translate("copy")} · ${this.keyLabel("tui.select.cancel")} ${translate("cancel")}`)}`));
+		const arrowAction = this.focus === "list" ? translate("select", this.locale) : translate("scroll", this.locale);
+		lines.push(row(` ${this.theme.fg("dim", `${this.keyLabel("tui.input.tab")} ${translate("focus", this.locale)} · ${this.keyLabel("tui.select.up")}/${this.keyLabel("tui.select.down")} ${arrowAction} · ${this.keyLabel("tui.select.confirm")} ${translate("copy", this.locale)} · ${this.keyLabel("tui.select.cancel")} ${translate("cancel", this.locale)}`)}`));
 		lines.push(this.theme.fg("border", `╰${"─".repeat(innerWidth)}╯`));
 		return lines;
 	}
@@ -635,7 +723,7 @@ export class SnippetPicker {
 	invalidate(): void {}
 }
 
-export default function betterSnippetsExtension(pi: ExtensionAPI) {
+export default function betterSnippetsExtension(pi: ExtensionAPI, locale?: string) {
 	let latestSnippets: CodeSnippet[] = [];
 	let pickerOpen = false;
 	let conversationTheme: Theme | undefined;
@@ -643,7 +731,7 @@ export default function betterSnippetsExtension(pi: ExtensionAPI) {
 	pi.registerMarkdownTransformer((markdown, context) => {
 		if (context.messageType !== "assistant") return markdown;
 		return conversationTheme
-			? decorateAssistantSnippets(markdown, context.availableWidth, conversationTheme)
+			? decorateAssistantSnippets(markdown, context.availableWidth, conversationTheme, locale)
 			: displayText(markdown, MAX_DISPLAY_MARKDOWN_GRAPHEMES);
 	});
 
@@ -652,9 +740,9 @@ export default function betterSnippetsExtension(pi: ExtensionAPI) {
 			ctx.ui.setWidget(INDICATOR_KEY, undefined);
 			return;
 		}
-		const noun = latestSnippets.length === 1 ? "snippet" : "snippets";
-		const action = latestSnippets.length === 1 ? "copy" : "→ number";
-		const text = `${latestSnippets.length} ${noun} · ${SHORTCUT} ${action}`;
+		const text = latestSnippets.length === 1
+			? translate("widgetOne", { count: latestSnippets.length, shortcut: SHORTCUT }, locale)
+			: translate("widgetMany", { count: latestSnippets.length, shortcut: SHORTCUT }, locale);
 		ctx.ui.setWidget(
 			INDICATOR_KEY,
 			(_tui, theme) => ({
@@ -668,10 +756,10 @@ export default function betterSnippetsExtension(pi: ExtensionAPI) {
 	const copySnippet = async (snippet: CodeSnippet, ctx: ExtensionContext) => {
 		try {
 			await copyToClipboard(snippet.code);
-			ctx.ui.notify(translate("copied", { language: displayLanguage(snippet.language) }), "info");
+			ctx.ui.notify(translate("copied", { language: displayLanguage(snippet.language, locale) }, locale), "info");
 		} catch (error) {
 			const detail = error instanceof Error ? `: ${displayText(error.message, MAX_DISPLAY_LANGUAGE_GRAPHEMES)}` : "";
-			ctx.ui.notify(translate("copyFailed", { detail }), "error");
+			ctx.ui.notify(translate("copyFailed", { detail }, locale), "error");
 		}
 	};
 
@@ -684,7 +772,7 @@ export default function betterSnippetsExtension(pi: ExtensionAPI) {
 
 	const canCopy = (ctx: ExtensionContext): boolean => {
 		if (ctx.mode === "tui") return true;
-		const message = translate("tuiOnly");
+		const message = translate("tuiOnly", locale);
 		if (ctx.mode === "json" || ctx.mode === "print") throw new Error(message);
 		ctx.ui.notify(message, "warning");
 		return false;
@@ -692,7 +780,7 @@ export default function betterSnippetsExtension(pi: ExtensionAPI) {
 
 	const notifyIfEmpty = (snippets: readonly CodeSnippet[], ctx: ExtensionContext): boolean => {
 		if (snippets.length > 0) return false;
-		ctx.ui.notify(translate("noSnippets"), "warning");
+		ctx.ui.notify(translate("noSnippets", locale), "warning");
 		return true;
 	};
 
@@ -704,7 +792,9 @@ export default function betterSnippetsExtension(pi: ExtensionAPI) {
 		if (requestedIndex !== undefined) {
 			const snippet = snippets[requestedIndex.value - 1];
 			if (!snippet) {
-				ctx.ui.notify(`Snippet ${displayIndexDiagnostic(requestedIndex.input)} does not exist (available: 1-${snippets.length})`, "error");
+				ctx.ui.notify(translate("invalidSnippet", {
+					value: displayIndexDiagnostic(requestedIndex.input), available: `1-${snippets.length}`,
+				}, locale), "error");
 				return;
 			}
 			await copySnippet(snippet, ctx);
@@ -723,6 +813,7 @@ export default function betterSnippetsExtension(pi: ExtensionAPI) {
 						() => tui.terminal.rows,
 						done,
 						() => tui.requestRender(),
+						locale,
 					),
 					{
 						overlay: true,
@@ -736,12 +827,12 @@ export default function betterSnippetsExtension(pi: ExtensionAPI) {
 					},
 				);
 			} catch {
-				ctx.ui.notify(translate("pickerFailed"), "error");
+				ctx.ui.notify(translate("pickerFailed", locale), "error");
 				return;
 			}
 			if (selectedIndex === undefined) return;
 			if (!isValidSnippetSelection(selectedIndex, snippets.length)) {
-				ctx.ui.notify(translate("invalidSelection"), "error");
+				ctx.ui.notify(translate("invalidSelection", locale), "error");
 				return;
 			}
 			await copySnippet(snippets[selectedIndex], ctx);
@@ -770,6 +861,7 @@ export default function betterSnippetsExtension(pi: ExtensionAPI) {
 						keybindings,
 						done,
 						() => tui.requestRender(),
+						locale,
 					),
 					{
 						overlay: true,
@@ -782,12 +874,12 @@ export default function betterSnippetsExtension(pi: ExtensionAPI) {
 					},
 				);
 			} catch {
-				ctx.ui.notify(translate("pickerFailed"), "error");
+				ctx.ui.notify(translate("pickerFailed", locale), "error");
 				return;
 			}
 			if (selectedIndex === undefined) return;
 			if (!isValidSnippetSelection(selectedIndex, snippets.length)) {
-				ctx.ui.notify(translate("invalidSelection"), "error");
+				ctx.ui.notify(translate("invalidSelection", locale), "error");
 				return;
 			}
 			await copySnippet(snippets[selectedIndex], ctx);
@@ -821,14 +913,14 @@ export default function betterSnippetsExtension(pi: ExtensionAPI) {
 	});
 
 	pi.registerCommand("copy-snippet", {
-		description: "Select and copy a fenced snippet from the latest assistant response",
+		description: translate("commandDescription", locale),
 		handler: async (args, ctx) => {
 			if (!canCopy(ctx)) return;
 			const value = args.trim();
 			if (value) {
 				const requestedIndex = parseSnippetIndex(value);
 				if (!requestedIndex) {
-					ctx.ui.notify(`${translate("invalidIndex", { value: displayIndexDiagnostic(args) })}. ${translate("usage")}`, "error");
+					ctx.ui.notify(`${translate("invalidIndex", { value: displayIndexDiagnostic(args) }, locale)}. ${translate("usage", locale)}`, "error");
 					return;
 				}
 				await chooseAndCopy(ctx, requestedIndex);
@@ -839,7 +931,7 @@ export default function betterSnippetsExtension(pi: ExtensionAPI) {
 	});
 
 	pi.registerShortcut(SHORTCUT, {
-		description: "Copy a fenced snippet by pressing its number",
+		description: translate("shortcutDescription", locale),
 		handler: async (ctx) => quickCopyByNumber(ctx),
 	});
 }

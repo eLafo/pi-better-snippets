@@ -1,6 +1,6 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { visibleWidth } from "@earendil-works/pi-tui";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { type KeyId, visibleWidth } from "@earendil-works/pi-tui";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const { copyToClipboard, highlightCode } = vi.hoisted(() => ({
 	copyToClipboard: vi.fn(async (_text: string) => undefined),
@@ -17,10 +17,14 @@ vi.mock("@earendil-works/pi-coding-agent", async (importOriginal) => ({
 import extension, {
 	decorateAssistantSnippets,
 	extractFencedCodeBlocks,
+	formatKeyId,
 	latestAssistantSnippets,
 	SnippetNumberPrompt,
 	SnippetPicker,
 	snippetLabel,
+	TRANSLATIONS,
+	translate,
+	validateTranslations,
 	snippetsFromAssistantMessage,
 } from "../index.js";
 
@@ -49,7 +53,7 @@ const pi = {
 	},
 } as unknown as ExtensionAPI;
 
-extension(pi);
+extension(pi, "en");
 
 function assistant(...texts: string[]) {
 	return {
@@ -129,8 +133,21 @@ async function emit(name: string, event: any, ctx: any) {
 	for (const handler of handlers.get(name) ?? []) await handler(event, ctx);
 }
 
+function mockAmbientLocale(locale: string): void {
+	vi.mocked(Intl.DateTimeFormat).mockReturnValue({
+		resolvedOptions: () => ({ locale }),
+	} as Intl.DateTimeFormat);
+}
+
 beforeEach(() => {
 	vi.clearAllMocks();
+	vi.spyOn(Intl, "DateTimeFormat").mockReturnValue({
+		resolvedOptions: () => ({ locale: "en" }),
+	} as Intl.DateTimeFormat);
+});
+
+afterEach(() => {
+	vi.restoreAllMocks();
 });
 
 describe("fenced snippet parsing", () => {
@@ -229,6 +246,199 @@ describe("assistant selection", () => {
 	});
 });
 
+describe("localized picker UI", () => {
+	const theme = {
+		bold: (text: string) => text,
+		fg: (_color: string, text: string) => text,
+		bg: (_color: string, text: string) => text,
+	} as any;
+	const snippets = [
+		{ code: "café cafe\u0301 👨‍👩‍👧‍👦 עברית العربية\nsecond line", info: "ts", language: "ts", startLine: 1, endLine: 4 },
+		{ code: "\u2066hidden\u2069 visible", info: "text", language: "text", startLine: 5, endLine: 7 },
+	];
+
+	it("canonicalizes supported locales and deterministically falls back to English", () => {
+		expect(translate("cancel", "en")).toBe("cancel");
+		expect(translate("cancel", "en-US")).toBe("cancel");
+		for (const locale of ["es", "es-MX", "ES-mx"]) expect(translate("cancel", locale)).toBe("cancelar");
+		expect(translate("snippetUnavailable", { number: 4 }, "es-MX")).toBe("El fragmento 4 no está disponible");
+		expect(snippetLabel({ ...snippets[0]!, code: "one" }, 0, "es")).toContain("1 línea");
+		expect(snippetLabel({ ...snippets[0]!, code: "one\ntwo" }, 0, "es")).toContain("2 líneas");
+		for (const [ambient, omitted] of [["en-US", "cancel"], ["es-MX", "cancelar"]] as const) {
+			mockAmbientLocale(ambient);
+			expect(translate("cancel")).toBe(omitted);
+			for (const locale of ["fr-FR", "\uD800"]) expect(translate("cancel", locale)).toBe("cancel");
+		}
+	});
+
+	it("rejects missing or unexpected interpolation values at compile time and runtime", () => {
+		if (false) {
+			// @ts-expect-error placeholder-bearing keys require their typed values
+			translate("snippetUnavailable");
+			// @ts-expect-error keys without placeholders do not accept interpolation values
+			translate("cancel", { value: "unexpected" });
+			// @ts-expect-error placeholder-bearing keys reject unexpected values
+			translate("copied", { language: "ts", detail: "unexpected" });
+		}
+		expect(() => (translate as (key: string, values: Record<string, string>) => string)("snippetUnavailable", {}))
+			.toThrow("Invalid interpolation values");
+		const broken = structuredClone(TRANSLATIONS);
+		broken.es.copied = "Fragmento {language} {extra}";
+		expect(() => validateTranslations(broken)).toThrow("Invalid es translation placeholders for copied");
+		const missing = structuredClone(TRANSLATIONS);
+		missing.en.copied = "Copied snippet";
+		expect(() => validateTranslations(missing)).toThrow("Invalid en translation placeholders for copied");
+		const duplicate = structuredClone(TRANSLATIONS);
+		duplicate.en.copied = "Copied {language} {language}";
+		expect(() => validateTranslations(duplicate)).toThrow("Invalid en translation placeholders for copied");
+	});
+
+	it("localizes every named Pi-TUI key while preserving literals and modifiers", () => {
+		const expected: Array<[KeyId, string, string]> = [
+			["escape", "Esc", "Esc"], ["esc", "Esc", "Esc"], ["enter", "Intro", "Enter"], ["return", "Intro", "Enter"], ["tab", "Tab", "Tab"], ["space", "Espacio", "Space"],
+			["backspace", "Retroceso", "Backspace"], ["delete", "Supr", "Delete"], ["insert", "Insert", "Insert"], ["clear", "Borrar", "Clear"], ["home", "Inicio", "Home"], ["end", "Fin", "End"],
+			["pageUp", "RePág", "PgUp"], ["pageDown", "AvPág", "PgDn"], ["up", "↑", "↑"], ["down", "↓", "↓"], ["left", "←", "←"], ["right", "→", "→"],
+			["f1", "F1", "F1"], ["f2", "F2", "F2"], ["f3", "F3", "F3"], ["f4", "F4", "F4"], ["f5", "F5", "F5"], ["f6", "F6", "F6"], ["f7", "F7", "F7"], ["f8", "F8", "F8"], ["f9", "F9", "F9"], ["f10", "F10", "F10"], ["f11", "F11", "F11"], ["f12", "F12", "F12"],
+			["ctrl+home", "Ctrl+Inicio", "Ctrl+Home"], ["shift+space", "Shift+Espacio", "Shift+Space"], ["alt+delete", "Alt+Supr", "Alt+Delete"], ["super+pageDown", "Super+AvPág", "Super+PgDn"], ["ctrl+shift+home", "Ctrl+Shift+Inicio", "Ctrl+Shift+Home"],
+			["a", "a", "a"], ["1", "1", "1"], ["+", "+", "+"], ["/", "/", "/"], ["ctrl++", "Ctrl++", "Ctrl++"], ["alt+/", "Alt+/", "Alt+/"],
+		];
+		for (const [key, spanish, english] of expected) {
+			expect(formatKeyId(key, "es-MX")).toBe(spanish);
+			expect(formatKeyId(key, "en-US")).toBe(english);
+		}
+		const configured = createKeybindings({
+			"tui.input.tab": ["space"],
+			"tui.select.up": ["backspace"],
+			"tui.select.down": ["home"],
+			"tui.select.cancel": [],
+		});
+		const picker = new SnippetPicker(snippets, theme, configured as any, () => 24, vi.fn(), () => undefined, "es");
+		const output = picker.render(120).join("\n");
+		expect(output).toContain("Espacio foco · Retroceso/Inicio");
+		expect(output).toContain("sin asignar cancelar");
+	});
+
+	it("substitutes every placeholder-bearing key in both catalogs", () => {
+		const examples = [
+			{ format: (locale: string) => translate("snippetUnavailable", { number: 7 }, locale), values: ["7"] },
+			{ format: (locale: string) => translate("pressNumber", { range: "1-9" }, locale), values: ["1-9"] },
+			{ format: (locale: string) => translate("copied", { language: "ts" }, locale), values: ["ts"] },
+			{ format: (locale: string) => translate("copyFailed", { detail: ": error" }, locale), values: [": error"] },
+			{ format: (locale: string) => translate("invalidIndex", { value: "x" }, locale), values: ["x"] },
+			{ format: (locale: string) => translate("invalidSnippet", { value: "7", available: "1-2" }, locale), values: ["7", "1-2"] },
+			{ format: (locale: string) => translate("lineCountOne", { count: 1 }, locale), values: ["1"] },
+			{ format: (locale: string) => translate("lineCountMany", { count: 2 }, locale), values: ["2"] },
+			{ format: (locale: string) => translate("snippetLabel", { index: 1, language: "ts", lines: "2", preview: "ok" }, locale), values: ["1", "ts", "2", "ok"] },
+			{ format: (locale: string) => translate("promptHint", { range: "1", cancelKey: "Esc" }, locale), values: ["1", "Esc"] },
+			{ format: (locale: string) => translate("promptHintMany", { range: "1-9", command: "/copy-snippet", cancelKey: "Esc" }, locale), values: ["1-9", "/copy-snippet", "Esc"] },
+			{ format: (locale: string) => translate("pickerTitle", { focus: "lista" }, locale), values: ["lista"] },
+			{ format: (locale: string) => translate("rangeOf", { start: 1, end: 2, total: 3 }, locale), values: ["1", "2", "3"] },
+			{ format: (locale: string) => translate("previewLines", { start: 1, end: 2 }, locale), values: ["1", "2"] },
+			{ format: (locale: string) => translate("compactFooter", { arrows: "↑/↓", confirm: "Intro", cancelKey: "Esc" }, locale), values: ["↑/↓", "Intro", "Esc"] },
+			{ format: (locale: string) => translate("widgetOne", { count: 1, shortcut: "Ctrl+C" }, locale), values: ["1", "Ctrl+C"] },
+			{ format: (locale: string) => translate("widgetMany", { count: 2, shortcut: "Ctrl+C" }, locale), values: ["2", "Ctrl+C"] },
+		];
+		for (const locale of ["en", "es"]) for (const example of examples) {
+			const rendered = example.format(locale);
+			for (const value of example.values) expect(rendered).toContain(value);
+			expect(rendered).not.toMatch(/\{\w+\}/);
+		}
+	});
+
+	it("keeps every Spanish picker and prompt row bounded at narrow widths", () => {
+		const bindings = createKeybindings({ "tui.select.confirm": [] });
+		const picker = new SnippetPicker(snippets, theme, bindings as any, () => 24, vi.fn(), () => undefined, "ES-mx");
+		const prompt = new SnippetNumberPrompt(12, theme, bindings, vi.fn(), () => undefined, "es-MX");
+		for (let width = 1; width <= 60; width++) {
+			for (const row of [...picker.render(width), ...prompt.render(width)]) expect(visibleWidth(row)).toBeLessThanOrEqual(width);
+		}
+		const output = picker.render(60).join("\n");
+		expect(output).toContain("Copiar fragmento");
+		expect(output).toContain("café cafe\u0301 👨‍👩‍👧‍👦 עברית العربية");
+		expect(output).toContain("👨‍👩‍👧‍👦");
+		expect(output).not.toMatch(/[\u200B-\u200C\u200E-\u200F\u202A-\u202E\u2060-\u206F]/u);
+		const unsafeLabel = snippetLabel(snippets[1]!, 1, "es");
+		expect(unsafeLabel).toContain("�hidden� visible");
+		expect(unsafeLabel).not.toMatch(/[\u200B-\u200C\u200E-\u200F\u202A-\u202E\u2060-\u206F]/u);
+		expect(output).not.toMatch(/\b(?:snippet|preview|lines|scroll|copy|cancel|unbound)\b/i);
+		picker.handleInput("\t");
+		expect(picker.render(60).join("\n")).toContain("Vista previa");
+
+		const compact = new SnippetPicker(snippets, theme, bindings as any, () => 8, vi.fn(), () => undefined, "es");
+		expect(compact.render(60).join("\n")).toContain("Copiar fragmento · Vista previa");
+		const errorPrompt = new SnippetNumberPrompt(2, theme, bindings, vi.fn(), () => undefined, "es");
+		errorPrompt.handleInput("9");
+		expect(errorPrompt.render(60).join("\n")).toContain("El fragmento 9 no está disponible");
+		const failingTheme = { ...theme, fg: () => { throw new Error("fallo"); } };
+		const fallbackPrompt = new SnippetNumberPrompt(2, failingTheme, bindings, vi.fn(), () => undefined, "es");
+		const fallbackPicker = new SnippetPicker(snippets, failingTheme, bindings as any, () => 24, vi.fn(), () => undefined, "es");
+		expect(errorPrompt.render(60).join("\n")).toContain("Pulsa");
+		expect(fallbackPrompt.render(60).join("\n")).toContain("Selector numérico no disponible");
+		expect(fallbackPicker.render(60).join("\n")).toContain("Vista previa no disponible");
+		for (let width = 1; width <= 60; width++) {
+			for (const row of [
+				...picker.render(width), ...compact.render(width), ...prompt.render(width), ...errorPrompt.render(width),
+				...fallbackPrompt.render(width), ...fallbackPicker.render(width),
+			]) expect(visibleWidth(row)).toBeLessThanOrEqual(width);
+		}
+		expect(picker.render(60).join("\n")).toContain("Tab foco");
+		expect(compact.render(60).join("\n")).toContain("desplazar");
+	});
+
+	it("uses the injected Spanish locale for widgets, notifications, and registered descriptions", async () => {
+		const localHandlers = new Map<string, Handler[]>();
+		let command!: Command & { description: string };
+		let shortcut!: Shortcut & { description: string };
+		const localPi = {
+			on(name: string, handler: Handler) { localHandlers.set(name, [...(localHandlers.get(name) ?? []), handler]); },
+			registerCommand(_name: string, registered: Command & { description: string }) { command = registered; },
+			registerShortcut(_key: string, registered: Shortcut & { description: string }) { shortcut = registered; },
+			registerMarkdownTransformer: () => undefined,
+		} as unknown as ExtensionAPI;
+		extension(localPi, "es-MX");
+		expect(command.description).toContain("Selecciona y copia un fragmento");
+		expect(shortcut.description).toContain("Copia un fragmento");
+
+		const ctx = createContext([entry(assistant("```ts\nuno\n```", "```json\ndos\n```"))]);
+		await command.handler("9", ctx);
+		expect(ctx.ui.notify).toHaveBeenLastCalledWith("El fragmento 9 no existe (disponibles: 1-2)", "error");
+		await command.handler("incorrecto", ctx);
+		expect(ctx.ui.notify).toHaveBeenLastCalledWith("Número de fragmento no válido: incorrecto. Uso: /copy-snippet [número]", "error");
+		await command.handler("1", ctx);
+		expect(ctx.ui.notify).toHaveBeenLastCalledWith("Fragmento ts copiado al portapapeles", "info");
+		copyToClipboard.mockRejectedValueOnce(new Error("portapapeles"));
+		await command.handler("1", ctx);
+		expect(ctx.ui.notify).toHaveBeenLastCalledWith("No se pudo copiar el fragmento: portapapeles", "error");
+		const emptyContext = createContext();
+		await command.handler("", emptyContext);
+		expect(emptyContext.ui.notify).toHaveBeenLastCalledWith("La última respuesta del asistente no contiene fragmentos delimitados", "warning");
+		const pickerFailure = createContext([entry(assistant("```ts\nuno\n```"))]);
+		pickerFailure.ui.custom.mockRejectedValueOnce(new Error("sin selector"));
+		await command.handler("", pickerFailure);
+		expect(pickerFailure.ui.notify).toHaveBeenLastCalledWith("No se pudo abrir el selector de fragmentos. Inténtalo de nuevo", "error");
+		const badSelection = createContext([entry(assistant("```ts\nuno\n```"))]);
+		badSelection.ui.custom.mockResolvedValueOnce(-1);
+		await command.handler("", badSelection);
+		expect(badSelection.ui.notify).toHaveBeenLastCalledWith("No se pudo seleccionar ese fragmento. Inténtalo de nuevo", "error");
+		const rpcContext = createContext([entry(assistant("```ts\nuno\n```"))], "rpc");
+		await command.handler("1", rpcContext);
+		expect(rpcContext.ui.notify).toHaveBeenLastCalledWith("La copia de fragmentos solo está disponible en la TUI interactiva", "warning");
+
+		for (const handler of localHandlers.get("message_end") ?? []) await handler({ message: assistant("```ts\nuno\n```", "```json\ndos\n```") }, ctx);
+		const pluralWidget = ctx.ui.setWidget.mock.calls.at(-1)![1];
+		const renderPluralWidget = (width: number) => pluralWidget({}, { fg: (_color: string, text: string) => text }).render(width)[0];
+		expect(renderPluralWidget(80)).toContain("2 fragmentos");
+		for (const handler of localHandlers.get("message_end") ?? []) await handler({ message: assistant("```ts\nuno\n```") }, ctx);
+		const singularWidget = ctx.ui.setWidget.mock.calls.at(-1)![1];
+		const renderSingularWidget = (width: number) => singularWidget({}, { fg: (_color: string, text: string) => text }).render(width)[0];
+		expect(renderSingularWidget(80)).toContain("1 fragmento");
+		for (let width = 1; width <= 60; width++) {
+			expect(visibleWidth(renderPluralWidget(width))).toBeLessThanOrEqual(width);
+			expect(visibleWidth(renderSingularWidget(width))).toBeLessThanOrEqual(width);
+		}
+	});
+});
+
 describe("hostile assistant display values", () => {
 	const theme = {
 		bold: (text: string) => text,
@@ -288,6 +498,25 @@ describe("hostile assistant display values", () => {
 		expect(safeLabel).toContain(rainbowFlag);
 		expect(isolatedZwjLabel).toContain("left�right");
 		expect(truncated.endsWith(`${combining.repeat(71)}…`)).toBe(true);
+	});
+
+	it.each(["\u061C", "\u200E", "\u200F", "\u00AD", "\uFEFF", "\u2066", "\u2069", "\u202E", "\u200B", "\u200D"])(
+		"neutralizes unsafe format character %j in display labels",
+		(unsafe) => {
+			const label = snippetLabel({ code: `left${unsafe}right`, info: "text", language: "text", startLine: 1, endLine: 3 }, 0, "en");
+			expect(label).toContain("left�right");
+			expect(label).not.toContain(unsafe);
+		},
+	);
+
+	it("truncates emoji graphemes intact at both sides of the preview boundary", () => {
+		const graphemes = ["👨‍👩‍👧‍👦", "🏳️‍🌈", "🇪🇸", "👍🏽"];
+		for (const grapheme of graphemes) {
+			const retained = snippetLabel({ code: `${"a".repeat(70)}${grapheme}xy`, info: "text", language: "text", startLine: 1, endLine: 3 }, 0, "en");
+			const omitted = snippetLabel({ code: `${"a".repeat(71)}${grapheme}x`, info: "text", language: "text", startLine: 1, endLine: 3 }, 0, "en");
+			expect(retained.split(" — ").at(-1)).toBe(`${"a".repeat(70)}${grapheme}…`);
+			expect(omitted.split(" — ").at(-1)).toBe(`${"a".repeat(71)}…`);
+		}
 	});
 
 	it("bounds highlighting, language labels, and picker rows", () => {
