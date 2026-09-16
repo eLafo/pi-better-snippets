@@ -2,6 +2,10 @@
   "name": "@elafo/pi-better-snippets",
   "version": "0.1.0",
   "private": false,
+  "packageManager": "npm@11.19.0",
+  "publishConfig": {
+    "access": "public"
+  },
   "description": "Previews syntax-highlighted fenced snippets and copies them individually from Pi assistant responses.",
   "type": "module",
   "keywords": [
@@ -12,6 +16,17 @@
     "clipboard"
   ],
   "license": "MIT",
+  "author": {
+    "name": "eLafo"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/eLafo/pi-better-snippets.git"
+  },
+  "bugs": {
+    "url": "https://github.com/eLafo/pi-better-snippets/issues"
+  },
+  "homepage": "https://github.com/eLafo/pi-better-snippets#readme",
   "files": [
     "index.ts",
     "skills",
@@ -32,8 +47,8 @@
     "check": "npm run typecheck && npm test"
   },
   "peerDependencies": {
-    "@earendil-works/pi-coding-agent": "^0.85.1",
-    "@earendil-works/pi-tui": "^0.85.1"
+    "@earendil-works/pi-coding-agent": "*",
+    "@earendil-works/pi-tui": "*"
   },
   "devDependencies": {
     "@earendil-works/pi-coding-agent": "0.85.1",
