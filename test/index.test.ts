@@ -1,4 +1,5 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { visibleWidth } from "@earendil-works/pi-tui";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const { copyToClipboard, highlightCode } = vi.hoisted(() => ({
@@ -217,6 +218,95 @@ describe("assistant selection", () => {
 	it("builds bounded, informative selector labels", () => {
 		const label = snippetLabel({ code: "\nconst answer = 42;\n", info: "ts", language: "ts", startLine: 1, endLine: 4 }, 1);
 		expect(label).toBe("2. ts · 3 lines — const answer = 42;");
+	});
+});
+
+describe("hostile assistant display values", () => {
+	const theme = {
+		bold: (text: string) => text,
+		fg: (_color: string, text: string) => text,
+		bg: (_color: string, text: string) => text,
+	} as any;
+	const keybindings = createKeybindings();
+	const stripTrustedMockSgr = (value: string) => value.replaceAll("\x1b[35m", "").replaceAll("\x1b[39m", "");
+
+	it("neutralizes control sequences before transcript and picker rendering while preserving trusted highlighter SGR", () => {
+		const hostileCode = "safe\u0000\x1b[2J\x1b[?25l\x1b[1;2H\x9b31m\x1b]8;;https://example.test\x07\x1b]52;c;secret\x1b\\\x1bPpayload\x1b\\\u2066\nnext\u007f";
+		const markdown = `\`\`\`ts\n${hostileCode}\n\`\`\``;
+		const rendered = decorateAssistantSnippets(markdown, 200, theme);
+		const snippet = extractFencedCodeBlocks(markdown)[0]!;
+		const picker = new SnippetPicker([snippet], theme, keybindings as any, () => 24, vi.fn());
+		const pickerOutput = picker.render(200).join("\n");
+
+		for (const output of [rendered, pickerOutput]) {
+			const withoutTrustedSgr = stripTrustedMockSgr(output);
+			expect(output).toContain("\x1b[35m");
+			expect(output).toContain("\x1b[39m");
+			expect(withoutTrustedSgr).not.toMatch(/[\u0000-\u0008\u000B-\u001F\u007F-\u009F]/u);
+		}
+		expect(highlightCode).toHaveBeenCalledWith(expect.not.stringContaining("\x1b"), "ts");
+	});
+
+	it("sanitizes hostile language metadata without passing it to the highlighter", () => {
+		const hostileLanguage = "ts\x1b[31m\x1b]8;;https://example.test\x1b\\\u202E\u200B";
+		const markdown = `\`\`\`${hostileLanguage}\ncode\n\`\`\``;
+		const rendered = decorateAssistantSnippets(markdown, 80, theme);
+		const snippet = extractFencedCodeBlocks(markdown)[0]!;
+		const pickerOutput = new SnippetPicker([snippet], theme, keybindings as any, () => 24, vi.fn()).render(80).join("\n");
+
+		for (const output of [rendered, pickerOutput, snippetLabel(snippet, 0)]) {
+			expect(stripTrustedMockSgr(output)).not.toMatch(/[\x1b\u0080-\u009F\u202A-\u202E\u200B]/u);
+		}
+		expect(highlightCode).toHaveBeenLastCalledWith(expect.any(String), undefined);
+	});
+
+	it("preserves safe Unicode text and complete emoji graphemes while neutralizing isolated ZWJ", () => {
+		const family = "👨‍👩‍👧‍👦";
+		const rainbowFlag = "🏳️‍🌈";
+		const visibleText = "café cafe\u0301 עברית العربية";
+		const safeLabel = snippetLabel({
+			code: `${visibleText} ${family} ${rainbowFlag}`,
+			info: "text",
+			language: "text",
+			startLine: 1,
+			endLine: 3,
+		}, 0);
+		const isolatedZwjLabel = snippetLabel({ code: "left\u200Dright", info: "text", language: "text", startLine: 1, endLine: 3 }, 0);
+		const combining = "e\u0301";
+		const truncated = snippetLabel({ code: combining.repeat(80), info: "text", language: "text", startLine: 1, endLine: 3 }, 0);
+
+		expect(safeLabel).toContain(visibleText);
+		expect(safeLabel).toContain(family);
+		expect(safeLabel).toContain(rainbowFlag);
+		expect(isolatedZwjLabel).toContain("left�right");
+		expect(truncated.endsWith(`${combining.repeat(71)}…`)).toBe(true);
+	});
+
+	it("bounds highlighting, language labels, and picker rows", () => {
+		const invalidLanguage = `typescript-${"x".repeat(200)}\x1b[31m`;
+		const hugeCode = "x".repeat(20_000);
+		const snippet = { code: hugeCode, info: invalidLanguage, language: invalidLanguage, startLine: 1, endLine: 3 };
+		const rendered = decorateAssistantSnippets(`\`\`\`${invalidLanguage}\n${hugeCode}\n\`\`\``, 80, theme);
+		const highlightedCode = highlightCode.mock.calls.at(-1)![0] as string;
+		const picker = new SnippetPicker([snippet], theme, keybindings as any, () => 24, vi.fn());
+		const pickerRows = picker.render(24);
+		const language64 = "a".repeat(64);
+		const language65 = "b".repeat(65);
+
+		expect(highlightedCode).toHaveLength(16_384);
+		expect(highlightCode).toHaveBeenLastCalledWith(expect.any(String), undefined);
+		expect(rendered.length).toBeLessThan(30_000);
+		expect(snippetLabel({ code: "ok", info: language64, language: language64, startLine: 1, endLine: 3 }, 0)).toContain(language64);
+		expect(snippetLabel({ code: "ok", info: language65, language: language65, startLine: 1, endLine: 3 }, 0)).toContain(`${"b".repeat(63)}…`);
+		expect(pickerRows.every((row) => visibleWidth(row) <= 24)).toBe(true);
+	});
+
+	it("keeps sanitized replacement offsets aligned with mixed CRLF, tabs, and a suffix", () => {
+		const markdown = `\`\`\`ts\r\n\tpadding\r\n${"\r\n".repeat(9)}\x1b[2J\r\n\`\`\`\r\ntrailing suffix`;
+		const rendered = decorateAssistantSnippets(markdown, 80, theme);
+
+		expect(rendered).toContain("trailing suffix");
+		expect(stripTrustedMockSgr(rendered)).not.toContain("\x1b");
 	});
 });
 
@@ -440,6 +530,16 @@ describe("extension integration", () => {
 		await shortcuts.get("ctrl+shift+c")!.handler(ctx);
 		expect(copyToClipboard).toHaveBeenCalledWith("one");
 		expect(ctx.ui.custom).not.toHaveBeenCalled();
+	});
+
+	it("preserves hostile snippet bodies exactly for clipboard copying while sanitizing notifications", async () => {
+		const rawCode = "\u0000\x1b[2J\x1b]52;c;secret\x07\u202E\u200B👍🏽\r\n\tend";
+		const rawLanguage = "ts\x1b[31m\u202E";
+		const ctx = createContext([entry(assistant(`\`\`\`${rawLanguage}\n${rawCode}\n\`\`\``))]);
+		await commands.get("copy-snippet")!.handler("1", ctx);
+		expect(copyToClipboard).toHaveBeenLastCalledWith(rawCode);
+		expect(ctx.ui.notify.mock.calls.at(-1)![0]).not.toContain("\x1b");
+		expect(ctx.ui.notify.mock.calls.at(-1)![0]).not.toContain("\u202E");
 	});
 
 	it("copies from the picker snapshot if a newer assistant message arrives", async () => {

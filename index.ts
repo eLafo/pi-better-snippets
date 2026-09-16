@@ -131,6 +131,52 @@ export function extractFencedCodeBlocks(markdown: string): CodeSnippet[] {
 
 const ANSI_SEQUENCE = /(\x1b\[[0-?]*[ -/]*[@-~])/g;
 const MARKDOWN_PUNCTUATION = /([!"#$%&'()*+,\-./:;<=>?@[\\\]^_`{|}~])/g;
+const UNSAFE_DISPLAY_CHARACTERS = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/gu;
+const EMOJI_BEFORE_ZWJ = /\p{Extended_Pictographic}(?:[\p{Emoji_Modifier}\p{M}\uFE0E\uFE0F])*$/u;
+const EMOJI_AFTER_ZWJ = /^(?:[\p{Emoji_Modifier}\p{M}\uFE0E\uFE0F])*\p{Extended_Pictographic}/u;
+const MAX_DISPLAY_MARKDOWN_GRAPHEMES = 128_000;
+const MAX_DISPLAY_CODE_GRAPHEMES = 16_384;
+const MAX_DISPLAY_LANGUAGE_GRAPHEMES = 64;
+const MAX_PREVIEW_GRAPHEMES = 72;
+const HIGHLIGHT_LANGUAGES = new Set([
+	"bash", "c", "cpp", "csharp", "css", "diff", "go", "html", "java", "javascript", "json", "jsx",
+	"kotlin", "markdown", "md", "php", "python", "ruby", "rust", "shell", "sql", "swift", "text", "toml",
+	"ts", "tsx", "typescript", "xml", "yaml", "yml",
+]);
+const GRAPHEME_SEGMENTER = new Intl.Segmenter(undefined, { granularity: "grapheme" });
+
+function truncateGraphemes(value: string, maximum: number, suffix = "…"): string {
+	const segments: string[] = [];
+	const suffixLength = Array.from(GRAPHEME_SEGMENTER.segment(suffix)).length;
+	for (const { segment } of GRAPHEME_SEGMENTER.segment(value)) {
+		if (segments.length === maximum) {
+			return segments.slice(0, Math.max(0, maximum - suffixLength)).join("") + suffix;
+		}
+		segments.push(segment);
+	}
+	return segments.join("");
+}
+
+function isSafeEmojiZwj(value: string, index: number): boolean {
+	return EMOJI_BEFORE_ZWJ.test(value.slice(0, index)) && EMOJI_AFTER_ZWJ.test(value.slice(index + 1));
+}
+
+/** Converts untrusted assistant text into bounded terminal-safe display text without changing stored snippets. */
+function displayText(value: string, maximum: number): string {
+	const normalized = value.replaceAll(/\r\n|\r/g, "\n").replaceAll("\t", "    ");
+	const sanitized = normalized.replace(UNSAFE_DISPLAY_CHARACTERS, (character, index) =>
+		character === "\n" || (character === "\u200D" && isSafeEmojiZwj(normalized, index)) ? character : "�"
+	);
+	return truncateGraphemes(sanitized, maximum);
+}
+
+function displayLanguage(language: string | undefined): string {
+	return displayText(language || "text", MAX_DISPLAY_LANGUAGE_GRAPHEMES);
+}
+
+function highlightLanguage(language: string | undefined): string | undefined {
+	return language && HIGHLIGHT_LANGUAGES.has(language.toLowerCase()) ? language.toLowerCase() : undefined;
+}
 
 function escapeMarkdownOutsideAnsi(value: string): string {
 	return value.split(ANSI_SEQUENCE).map((part) =>
@@ -142,9 +188,9 @@ function decoratedSnippet(snippet: CodeSnippet, snippetIndex: number, width: num
 	const panelWidth = Math.max(1, width);
 	const bodyWidth = Math.max(1, panelWidth - 2);
 	const codeWidth = Math.max(1, bodyWidth - 2);
-	const normalizedCode = snippet.code.replaceAll("\t", "    ").replaceAll(/\r\n|\r/g, "\n");
-	const highlightedLines = snippet.code
-		? highlightCode(normalizedCode, snippet.language)
+	const code = displayText(snippet.code, MAX_DISPLAY_CODE_GRAPHEMES);
+	const highlightedLines = code
+		? highlightCode(code, highlightLanguage(snippet.language))
 		: [theme.fg("mdCodeBlock", translate("emptySnippet"))];
 	const visualLines = highlightedLines.flatMap((line) => wrapTextWithAnsi(line || " ", codeWidth));
 	const fit = (value: string, targetWidth: number) => {
@@ -155,7 +201,7 @@ function decoratedSnippet(snippet: CodeSnippet, snippetIndex: number, width: num
 		return visualLines.map((line) => escapeMarkdownOutsideAnsi(fit(line, panelWidth))).join("\n");
 	}
 
-	const language = snippet.language || "text";
+	const language = displayLanguage(snippet.language);
 	const label = ` [${snippetIndex + 1}] ${language} `;
 	const top = theme.fg(
 		"borderMuted",
@@ -172,16 +218,17 @@ function decoratedSnippet(snippet: CodeSnippet, snippetIndex: number, width: num
 
 /** Decorate complete assistant code fences for display without changing stored Markdown. */
 export function decorateAssistantSnippets(markdown: string, availableWidth: number, theme: Theme): string {
-	const snippets = extractFencedCodeBlocks(markdown);
-	if (snippets.length === 0) return markdown;
+	const displayMarkdown = displayText(markdown, MAX_DISPLAY_MARKDOWN_GRAPHEMES);
+	const snippets = extractFencedCodeBlocks(displayMarkdown);
+	if (snippets.length === 0) return displayMarkdown;
 
-	const lines = sourceLines(markdown);
-	let decorated = markdown;
+	const lines = sourceLines(displayMarkdown);
+	let decorated = displayMarkdown;
 	for (let index = snippets.length - 1; index >= 0; index--) {
 		const snippet = snippets[index]!;
 		const opener = lines[snippet.startLine - 1]!;
 		const closer = lines[snippet.endLine - 1]!;
-		const trailingLineEnding = markdown.slice(closer.contentEnd, closer.end);
+		const trailingLineEnding = displayMarkdown.slice(closer.contentEnd, closer.end);
 		const replacement = decoratedSnippet(snippet, index, availableWidth, theme) + trailingLineEnding;
 		decorated = decorated.slice(0, opener.start) + replacement + decorated.slice(closer.end);
 	}
@@ -218,12 +265,12 @@ function lineCount(code: string): number {
 }
 
 function preview(code: string): string {
-	const firstContentLine = code.split(/\r\n|\n|\r/).find((line) => line.trim())?.trim() || "(empty)";
-	return firstContentLine.length > 72 ? `${firstContentLine.slice(0, 69)}…` : firstContentLine;
+	const firstContentLine = displayText(code, MAX_DISPLAY_CODE_GRAPHEMES).split("\n").find((line) => line.trim())?.trim() || "(empty)";
+	return truncateGraphemes(firstContentLine, MAX_PREVIEW_GRAPHEMES);
 }
 
 export function snippetLabel(snippet: CodeSnippet, index: number): string {
-	const language = snippet.language || "text";
+	const language = displayLanguage(snippet.language);
 	const lines = lineCount(snippet.code);
 	return `${index + 1}. ${language} · ${lines} ${lines === 1 ? "line" : "lines"} — ${preview(snippet.code)}`;
 }
@@ -390,9 +437,9 @@ export class SnippetPicker {
 
 	private visualCodeRows(innerWidth: number): Array<{ lineNumber: string; code: string }> {
 		const selected = this.snippets[this.selectedIndex]!;
-		const normalizedCode = selected.code.replaceAll("\t", "    ");
-		const codeLines = selected.code
-			? highlightCode(normalizedCode.replaceAll(/\r\n|\r/g, "\n"), selected.language)
+		const code = displayText(selected.code, MAX_DISPLAY_CODE_GRAPHEMES);
+		const codeLines = code
+			? highlightCode(code, highlightLanguage(selected.language))
 			: [this.theme.fg("mdCodeBlock", translate("emptySnippet"))];
 		const numberWidth = String(codeLines.length).length;
 		const codeWidth = Math.max(1, innerWidth - numberWidth - 5);
@@ -501,7 +548,7 @@ export class SnippetPicker {
 
 		lines.push(rule());
 		const selected = this.snippets[this.selectedIndex]!;
-		const language = selected.language || "text";
+		const language = displayLanguage(selected.language);
 		lines.push(panelBoundary(true, `${translate("preview")} · ${language} · lines ${selected.startLine}-${selected.endLine}`));
 		const visualCodeRows = this.visualCodeRows(panelInnerWidth);
 		this.previewStartRow = lines.length;
@@ -533,8 +580,10 @@ export default function betterSnippetsExtension(pi: ExtensionAPI) {
 	let conversationTheme: Theme | undefined;
 
 	pi.registerMarkdownTransformer((markdown, context) => {
-		if (context.messageType !== "assistant" || !conversationTheme) return markdown;
-		return decorateAssistantSnippets(markdown, context.availableWidth, conversationTheme);
+		if (context.messageType !== "assistant") return markdown;
+		return conversationTheme
+			? decorateAssistantSnippets(markdown, context.availableWidth, conversationTheme)
+			: displayText(markdown, MAX_DISPLAY_MARKDOWN_GRAPHEMES);
 	});
 
 	const refreshIndicator = (ctx: ExtensionContext) => {
@@ -558,9 +607,9 @@ export default function betterSnippetsExtension(pi: ExtensionAPI) {
 	const copySnippet = async (snippet: CodeSnippet, ctx: ExtensionContext) => {
 		try {
 			await copyToClipboard(snippet.code);
-			ctx.ui.notify(translate("copied", { language: snippet.language || "text" }), "info");
+			ctx.ui.notify(translate("copied", { language: displayLanguage(snippet.language) }), "info");
 		} catch (error) {
-			const detail = error instanceof Error ? `: ${error.message}` : "";
+			const detail = error instanceof Error ? `: ${displayText(error.message, MAX_DISPLAY_LANGUAGE_GRAPHEMES)}` : "";
 			ctx.ui.notify(translate("copyFailed", { detail }), "error");
 		}
 	};
