@@ -215,6 +215,14 @@ describe("assistant selection", () => {
 		expect(snippetsFromAssistantMessage(message).map((snippet) => snippet.code)).toEqual(["yes"]);
 	});
 
+	it("ignores null, primitive, and malformed assistant content blocks", () => {
+		const message = {
+			role: "assistant",
+			content: [null, 1, "text", {}, { type: "text" }, { type: "text", text: 3 }, { type: "text", text: "```ts\nvalid\n```" }],
+		};
+		expect(snippetsFromAssistantMessage(message).map((snippet) => snippet.code)).toEqual(["valid"]);
+	});
+
 	it("builds bounded, informative selector labels", () => {
 		const label = snippetLabel({ code: "\nconst answer = 42;\n", info: "ts", language: "ts", startLine: 1, endLine: 4 }, 1);
 		expect(label).toBe("2. ts · 3 lines — const answer = 42;");
@@ -576,14 +584,169 @@ describe("extension integration", () => {
 		expect(ctx.ui.notify).toHaveBeenCalledWith("Could not copy the snippet: unavailable", "error");
 	});
 
-	it("does not write clipboard escape sequences in RPC mode", async () => {
-		const ctx = createContext([entry(assistant("```ts\none\n```"))], "rpc");
-		await commands.get("copy-snippet")!.handler("1", ctx);
-		expect(copyToClipboard).not.toHaveBeenCalled();
-		expect(ctx.ui.notify).toHaveBeenCalledWith(
-			"Snippet copying is only available in the interactive TUI",
-			"warning",
+	it("accepts only safe command indexes and bounds hostile index diagnostics", async () => {
+		const ctx = createContext([entry(assistant("```ts\none\n```"))]);
+		const command = commands.get("copy-snippet")!;
+
+		await command.handler(String(Number.MAX_SAFE_INTEGER), ctx);
+		expect(ctx.ui.notify).toHaveBeenLastCalledWith(
+			"Snippet 9007199254740991 does not exist (available: 1-1)",
+			"error",
 		);
+
+		await command.handler("9007199254740992", ctx);
+		expect(ctx.ui.notify).toHaveBeenLastCalledWith(
+			"Invalid snippet number: 9007199254740992. Usage: /copy-snippet [number]",
+			"error",
+		);
+
+		await command.handler("01", ctx);
+		expect(ctx.ui.notify).toHaveBeenLastCalledWith(
+			"Invalid snippet number: 01. Usage: /copy-snippet [number]",
+			"error",
+		);
+
+		const hundredsOfDigits = "9".repeat(500);
+		await command.handler(hundredsOfDigits, ctx);
+		const [diagnostic, level] = ctx.ui.notify.mock.calls.at(-1)!;
+		expect(level).toBe("error");
+		expect(diagnostic).toMatch(/^Invalid snippet number: 9{63}…\. Usage:/);
+		expect(diagnostic).not.toContain("Infinity");
+		expect(copyToClipboard).not.toHaveBeenCalled();
+	});
+
+	it("reports custom failures and contains deferred picker rendering failures", async () => {
+		const ctx = createContext([entry(assistant("```ts\none\n```"))]);
+		const command = commands.get("copy-snippet")!;
+		const copiesBeforeCustomFailure = copyToClipboard.mock.calls.length;
+		ctx.ui.custom.mockRejectedValueOnce(new Error("dialog unavailable"));
+
+		await command.handler("", ctx);
+		expect(ctx.ui.notify).toHaveBeenLastCalledWith("Could not open the snippet picker. Please try again", "error");
+		expect(copyToClipboard.mock.calls).toHaveLength(copiesBeforeCustomFailure);
+		await command.handler("", ctx);
+		expect(copyToClipboard.mock.calls).toHaveLength(copiesBeforeCustomFailure + 1);
+		expect(copyToClipboard).toHaveBeenLastCalledWith("one");
+
+		const renderFailure = createContext([entry(assistant("```ts\none\n```"))]);
+		const copiesBeforeRenderFailure = copyToClipboard.mock.calls.length;
+		let installed!: SnippetPicker;
+		renderFailure.ui.custom.mockImplementationOnce((factory: any) => new Promise((resolve) => {
+			installed = factory(
+				{ requestRender: vi.fn(), terminal: { rows: 30 } },
+				{ bold: (text: string) => text, fg: (_color: string, text: string) => text, bg: (_color: string, text: string) => text },
+				createKeybindings(),
+				resolve,
+			);
+		}));
+		const pending = command.handler("", renderFailure);
+		await vi.waitFor(() => expect(renderFailure.ui.custom).toHaveBeenCalledOnce());
+		highlightCode.mockImplementationOnce(() => { throw new Error("render failed"); });
+		const fallback = installed.render(80);
+		expect(fallback.join("\n")).toContain("Snippet preview unavailable. Press Esc to cancel");
+		expect(fallback.every((row) => visibleWidth(row) <= 80 && !row.includes("\x1b"))).toBe(true);
+		installed.handleInput("\x1b");
+		await pending;
+		expect(renderFailure.ui.notify).not.toHaveBeenCalled();
+		expect(copyToClipboard.mock.calls).toHaveLength(copiesBeforeRenderFailure);
+		await command.handler("", renderFailure);
+		expect(copyToClipboard.mock.calls).toHaveLength(copiesBeforeRenderFailure + 1);
+		expect(copyToClipboard).toHaveBeenLastCalledWith("one");
+	});
+
+	it.each([-1, Number.NaN, 0.5, 1, null])("rejects malformed picker selection %p and recovers", async (selection) => {
+		const ctx = createContext([entry(assistant("```ts\none\n```"))]);
+		const command = commands.get("copy-snippet")!;
+		const copiesBeforeMalformedSelection = copyToClipboard.mock.calls.length;
+		ctx.ui.custom.mockResolvedValueOnce(selection as number | undefined);
+
+		await command.handler("", ctx);
+		expect(ctx.ui.notify).toHaveBeenLastCalledWith("Could not select that snippet. Please try again", "error");
+		expect(copyToClipboard.mock.calls).toHaveLength(copiesBeforeMalformedSelection);
+		await command.handler("", ctx);
+		expect(copyToClipboard.mock.calls).toHaveLength(copiesBeforeMalformedSelection + 1);
+		expect(copyToClipboard).toHaveBeenLastCalledWith("one");
+	});
+
+	it("recovers the shortcut picker after custom and malformed-selection failures", async () => {
+		const ctx = createContext([entry(assistant("```ts\none\n```\n```json\ntwo\n```"))]);
+		const shortcut = shortcuts.get("ctrl+shift+c")!;
+		const copiesBeforeCustomFailure = copyToClipboard.mock.calls.length;
+		ctx.ui.custom.mockRejectedValueOnce(new Error("dialog unavailable"));
+
+		await shortcut.handler(ctx);
+		expect(ctx.ui.notify).toHaveBeenLastCalledWith("Could not open the snippet picker. Please try again", "error");
+		expect(copyToClipboard.mock.calls).toHaveLength(copiesBeforeCustomFailure);
+		ctx.ui.custom.mockResolvedValueOnce(1);
+		await shortcut.handler(ctx);
+		expect(copyToClipboard.mock.calls).toHaveLength(copiesBeforeCustomFailure + 1);
+		expect(copyToClipboard).toHaveBeenLastCalledWith("two");
+
+		const copiesBeforeMalformedSelection = copyToClipboard.mock.calls.length;
+		ctx.ui.custom.mockResolvedValueOnce(Number.NaN);
+		await shortcut.handler(ctx);
+		expect(ctx.ui.notify).toHaveBeenLastCalledWith("Could not select that snippet. Please try again", "error");
+		expect(copyToClipboard.mock.calls).toHaveLength(copiesBeforeMalformedSelection);
+		ctx.ui.custom.mockResolvedValueOnce(0);
+		await shortcut.handler(ctx);
+		expect(copyToClipboard.mock.calls).toHaveLength(copiesBeforeMalformedSelection + 1);
+		expect(copyToClipboard).toHaveBeenLastCalledWith("one");
+	});
+
+	it("contains deferred shortcut prompt rendering failures and recovers after cancellation", async () => {
+		const ctx = createContext([entry(assistant("```ts\none\n```\n```json\ntwo\n```"))]);
+		const shortcut = shortcuts.get("ctrl+shift+c")!;
+		let installed!: SnippetNumberPrompt;
+		ctx.ui.custom.mockImplementationOnce((factory: any) => new Promise((resolve) => {
+			installed = factory(
+				{ requestRender: vi.fn(), terminal: { rows: 30 } },
+				{
+					bold: (text: string) => text,
+					fg: () => { throw new Error("render failed"); },
+					bg: (_color: string, text: string) => text,
+				},
+				createKeybindings(),
+				resolve,
+			);
+		}));
+
+		const copiesBeforeRenderFailure = copyToClipboard.mock.calls.length;
+		const pending = shortcut.handler(ctx);
+		await vi.waitFor(() => expect(ctx.ui.custom).toHaveBeenCalledOnce());
+		const fallback = installed.render(80);
+		expect(fallback.join("\n")).toContain("Snippet number picker unavailable. Press Esc to cancel");
+		expect(fallback.every((row) => visibleWidth(row) <= 80 && !row.includes("\x1b"))).toBe(true);
+		installed.handleInput("\x1b");
+		await pending;
+		expect(ctx.ui.notify).not.toHaveBeenCalled();
+		expect(copyToClipboard.mock.calls).toHaveLength(copiesBeforeRenderFailure);
+
+		ctx.ui.custom.mockResolvedValueOnce(1);
+		await shortcut.handler(ctx);
+		expect(copyToClipboard.mock.calls).toHaveLength(copiesBeforeRenderFailure + 1);
+		expect(copyToClipboard).toHaveBeenLastCalledWith("two");
+	});
+
+	it("reports every command argument and never accesses clipboard in RPC mode", async () => {
+		const ctx = createContext([entry(assistant("```ts\none\n```"))], "rpc");
+		const command = commands.get("copy-snippet")!;
+		for (const args of ["1", "not-a-number", "9".repeat(500)]) await command.handler(args, ctx);
+		expect(copyToClipboard).not.toHaveBeenCalled();
+		expect(ctx.ui.notify).toHaveBeenCalledTimes(3);
+		for (const call of ctx.ui.notify.mock.calls) {
+			expect(call).toEqual(["Snippet copying is only available in the interactive TUI", "warning"]);
+		}
+	});
+
+	it.each(["json", "print"])("rejects every command argument observably before parsing in %s mode", async (mode) => {
+		const ctx = createContext([entry(assistant("```ts\none\n```"))], mode);
+		const command = commands.get("copy-snippet")!;
+		for (const args of ["1", "not-a-number", "9007199254740992", "9".repeat(500)]) {
+			await expect(command.handler(args, ctx))
+				.rejects.toThrow("Snippet copying is only available in the interactive TUI");
+		}
+		expect(copyToClipboard).not.toHaveBeenCalled();
+		expect(ctx.ui.notify).not.toHaveBeenCalled();
 	});
 
 	it("shows a dim standalone footer line and hides it when empty", async () => {

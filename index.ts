@@ -8,7 +8,6 @@ import {
 import {
 	truncateToWidth,
 	type KeyId,
-	type KeybindingsManager,
 	type TuiMouseEvent,
 	type TuiMouseEventResult,
 	visibleWidth,
@@ -34,14 +33,19 @@ type MessageKey =
 	| "copyFailed"
 	| "tuiOnly"
 	| "noSnippets"
-	| "usage";
+	| "usage"
+	| "invalidIndex"
+	| "pickerFailed"
+	| "pickerRenderFailed"
+	| "numberPromptRenderFailed"
+	| "invalidSelection";
 
 const TRANSLATIONS: Record<"en" | "es", Record<MessageKey, string>> = {
 	en: {
-		emptySnippet: "(empty snippet)", snippetUnavailable: "Snippet {number} is not available", copyByNumber: "Copy snippet by number", pressNumber: "Press {range}", cancel: "cancel", preview: "Preview", rows: "Rows", focus: "focus", select: "select", scroll: "scroll", copy: "copy", copied: "Copied {language} snippet to the clipboard", copyFailed: "Could not copy the snippet{detail}", tuiOnly: "Snippet copying is only available in the interactive TUI", noSnippets: "The latest assistant response has no fenced snippets", usage: "Usage: /copy-snippet [number]",
+		emptySnippet: "(empty snippet)", snippetUnavailable: "Snippet {number} is not available", copyByNumber: "Copy snippet by number", pressNumber: "Press {range}", cancel: "cancel", preview: "Preview", rows: "Rows", focus: "focus", select: "select", scroll: "scroll", copy: "copy", copied: "Copied {language} snippet to the clipboard", copyFailed: "Could not copy the snippet{detail}", tuiOnly: "Snippet copying is only available in the interactive TUI", noSnippets: "The latest assistant response has no fenced snippets", usage: "Usage: /copy-snippet [number]", invalidIndex: "Invalid snippet number: {value}", pickerFailed: "Could not open the snippet picker. Please try again", pickerRenderFailed: "Snippet preview unavailable. Press Esc to cancel", numberPromptRenderFailed: "Snippet number picker unavailable. Press Esc to cancel", invalidSelection: "Could not select that snippet. Please try again",
 	},
 	es: {
-		emptySnippet: "(fragmento vacío)", snippetUnavailable: "El fragmento {number} no está disponible", copyByNumber: "Copiar fragmento por número", pressNumber: "Pulsa {range}", cancel: "cancelar", preview: "Vista previa", rows: "Filas", focus: "foco", select: "seleccionar", scroll: "desplazar", copy: "copiar", copied: "Fragmento {language} copiado al portapapeles", copyFailed: "No se pudo copiar el fragmento{detail}", tuiOnly: "La copia de fragmentos solo está disponible en la TUI interactiva", noSnippets: "La última respuesta del asistente no contiene fragmentos delimitados", usage: "Uso: /copy-snippet [número]",
+		emptySnippet: "(fragmento vacío)", snippetUnavailable: "El fragmento {number} no está disponible", copyByNumber: "Copiar fragmento por número", pressNumber: "Pulsa {range}", cancel: "cancelar", preview: "Vista previa", rows: "Filas", focus: "foco", select: "seleccionar", scroll: "desplazar", copy: "copiar", copied: "Fragmento {language} copiado al portapapeles", copyFailed: "No se pudo copiar el fragmento{detail}", tuiOnly: "La copia de fragmentos solo está disponible en la TUI interactiva", noSnippets: "La última respuesta del asistente no contiene fragmentos delimitados", usage: "Uso: /copy-snippet [número]", invalidIndex: "Número de fragmento no válido: {value}", pickerFailed: "No se pudo abrir el selector de fragmentos. Inténtalo de nuevo", pickerRenderFailed: "Vista previa no disponible. Pulsa Esc para cancelar", numberPromptRenderFailed: "Selector numérico no disponible. Pulsa Esc para cancelar", invalidSelection: "No se pudo seleccionar ese fragmento. Inténtalo de nuevo",
 	},
 };
 
@@ -69,7 +73,12 @@ interface SourceLine {
 
 interface AssistantMessageLike {
 	role: "assistant";
-	content: Array<{ type: string; text?: string }>;
+	content: readonly unknown[];
+}
+
+interface RequestedSnippetIndex {
+	value: number;
+	input: string;
 }
 
 function sourceLines(markdown: string): SourceLine[] {
@@ -138,6 +147,8 @@ const MAX_DISPLAY_MARKDOWN_GRAPHEMES = 128_000;
 const MAX_DISPLAY_CODE_GRAPHEMES = 16_384;
 const MAX_DISPLAY_LANGUAGE_GRAPHEMES = 64;
 const MAX_PREVIEW_GRAPHEMES = 72;
+const MAX_INDEX_DIAGNOSTIC_GRAPHEMES = 64;
+const MAX_SAFE_INTEGER_TEXT = String(Number.MAX_SAFE_INTEGER);
 const HIGHLIGHT_LANGUAGES = new Set([
 	"bash", "c", "cpp", "csharp", "css", "diff", "go", "html", "java", "javascript", "json", "jsx",
 	"kotlin", "markdown", "md", "php", "python", "ruby", "rust", "shell", "sql", "swift", "text", "toml",
@@ -172,6 +183,22 @@ function displayText(value: string, maximum: number): string {
 
 function displayLanguage(language: string | undefined): string {
 	return displayText(language || "text", MAX_DISPLAY_LANGUAGE_GRAPHEMES);
+}
+
+function displayIndexDiagnostic(value: string): string {
+	return displayText(value, MAX_INDEX_DIAGNOSTIC_GRAPHEMES).replaceAll("\n", "↵");
+}
+
+/** Parses only canonical, exactly representable positive integer command indexes. */
+function parseSnippetIndex(value: string): RequestedSnippetIndex | undefined {
+	if (!/^[1-9]\d*$/.test(value)) return undefined;
+	if (value.length > MAX_SAFE_INTEGER_TEXT.length) return undefined;
+	if (value.length === MAX_SAFE_INTEGER_TEXT.length && value > MAX_SAFE_INTEGER_TEXT) return undefined;
+	return { value: Number(value), input: value };
+}
+
+function isValidSnippetSelection(value: unknown, snippetCount: number): value is number {
+	return typeof value === "number" && Number.isInteger(value) && value >= 0 && value < snippetCount;
 }
 
 function highlightLanguage(language: string | undefined): string | undefined {
@@ -237,15 +264,19 @@ export function decorateAssistantSnippets(markdown: string, availableWidth: numb
 
 function isAssistantMessage(message: unknown): message is AssistantMessageLike {
 	if (!message || typeof message !== "object") return false;
-	const candidate = message as Partial<AssistantMessageLike>;
+	const candidate = message as { role?: unknown; content?: unknown };
 	return candidate.role === "assistant" && Array.isArray(candidate.content);
+}
+
+function isTextContentBlock(block: unknown): block is { type: "text"; text: string } {
+	if (!block || typeof block !== "object") return false;
+	const candidate = block as { type?: unknown; text?: unknown };
+	return candidate.type === "text" && typeof candidate.text === "string";
 }
 
 export function snippetsFromAssistantMessage(message: unknown): CodeSnippet[] {
 	if (!isAssistantMessage(message)) return [];
-	return message.content.flatMap((block) =>
-		block.type === "text" && typeof block.text === "string" ? extractFencedCodeBlocks(block.text) : [],
-	);
+	return message.content.flatMap((block) => isTextContentBlock(block) ? extractFencedCodeBlocks(block.text) : []);
 }
 
 export function latestAssistantSnippets(entries: readonly unknown[]): CodeSnippet[] {
@@ -315,6 +346,21 @@ export class SnippetNumberPrompt {
 	}
 
 	render(width: number): string[] {
+		try {
+			return this.renderContent(width);
+		} catch {
+			return this.renderFallback(width);
+		}
+	}
+
+	private renderFallback(width: number): string[] {
+		const availableWidth = typeof width === "number" && Number.isFinite(width)
+			? Math.max(1, Math.floor(width))
+			: 1;
+		return [translate("numberPromptRenderFailed").slice(0, availableWidth)];
+	}
+
+	private renderContent(width: number): string[] {
 		const innerWidth = Math.max(1, width - 2);
 		const fit = (value: string) => {
 			const truncated = truncateToWidth(value, innerWidth, "");
@@ -469,6 +515,21 @@ export class SnippetPicker {
 	}
 
 	render(width: number): string[] {
+		try {
+			return this.renderContent(width);
+		} catch {
+			return this.renderFallback(width);
+		}
+	}
+
+	private renderFallback(width: number): string[] {
+		const availableWidth = typeof width === "number" && Number.isFinite(width)
+			? Math.max(1, Math.floor(width))
+			: 1;
+		return [translate("pickerRenderFailed").slice(0, availableWidth)];
+	}
+
+	private renderContent(width: number): string[] {
 		const innerWidth = Math.max(1, width - 2);
 		const fit = (value: string, targetWidth = innerWidth) => {
 			const truncated = truncateToWidth(value, targetWidth, "");
@@ -623,7 +684,9 @@ export default function betterSnippetsExtension(pi: ExtensionAPI) {
 
 	const canCopy = (ctx: ExtensionContext): boolean => {
 		if (ctx.mode === "tui") return true;
-		ctx.ui.notify(translate("tuiOnly"), "warning");
+		const message = translate("tuiOnly");
+		if (ctx.mode === "json" || ctx.mode === "print") throw new Error(message);
+		ctx.ui.notify(message, "warning");
 		return false;
 	};
 
@@ -633,15 +696,15 @@ export default function betterSnippetsExtension(pi: ExtensionAPI) {
 		return true;
 	};
 
-	const chooseAndCopy = async (ctx: ExtensionContext, requestedIndex?: number) => {
+	const chooseAndCopy = async (ctx: ExtensionContext, requestedIndex?: RequestedSnippetIndex) => {
 		if (pickerOpen || !canCopy(ctx)) return;
 		const snippets = availableSnippets(ctx);
 		if (notifyIfEmpty(snippets, ctx)) return;
 
 		if (requestedIndex !== undefined) {
-			const snippet = snippets[requestedIndex - 1];
+			const snippet = snippets[requestedIndex.value - 1];
 			if (!snippet) {
-				ctx.ui.notify(`Snippet ${requestedIndex} does not exist (available: 1-${snippets.length})`, "error");
+				ctx.ui.notify(`Snippet ${displayIndexDiagnostic(requestedIndex.input)} does not exist (available: 1-${snippets.length})`, "error");
 				return;
 			}
 			await copySnippet(snippet, ctx);
@@ -650,27 +713,38 @@ export default function betterSnippetsExtension(pi: ExtensionAPI) {
 
 		pickerOpen = true;
 		try {
-			const selectedIndex = await ctx.ui.custom<number | undefined>(
-				(tui, theme, keybindings, done) => new SnippetPicker(
-					snippets,
-					theme,
-					keybindings as KeybindingsManager,
-					() => tui.terminal.rows,
-					done,
-					() => tui.requestRender(),
-				),
-				{
-					overlay: true,
-					overlayOptions: {
-						anchor: "center",
-						width: "90%",
-						minWidth: 60,
-						maxHeight: MAX_OVERLAY_HEIGHT,
-						margin: 0,
+			let selectedIndex: unknown;
+			try {
+				selectedIndex = await ctx.ui.custom<unknown>(
+					(tui, theme, keybindings, done) => new SnippetPicker(
+						snippets,
+						theme,
+						keybindings,
+						() => tui.terminal.rows,
+						done,
+						() => tui.requestRender(),
+					),
+					{
+						overlay: true,
+						overlayOptions: {
+							anchor: "center",
+							width: "90%",
+							minWidth: 60,
+							maxHeight: MAX_OVERLAY_HEIGHT,
+							margin: 0,
+						},
 					},
-				},
-			);
-			if (selectedIndex !== undefined) await copySnippet(snippets[selectedIndex]!, ctx);
+				);
+			} catch {
+				ctx.ui.notify(translate("pickerFailed"), "error");
+				return;
+			}
+			if (selectedIndex === undefined) return;
+			if (!isValidSnippetSelection(selectedIndex, snippets.length)) {
+				ctx.ui.notify(translate("invalidSelection"), "error");
+				return;
+			}
+			await copySnippet(snippets[selectedIndex], ctx);
 		} finally {
 			pickerOpen = false;
 		}
@@ -687,25 +761,36 @@ export default function betterSnippetsExtension(pi: ExtensionAPI) {
 
 		pickerOpen = true;
 		try {
-			const selectedIndex = await ctx.ui.custom<number | undefined>(
-				(tui, theme, keybindings, done) => new SnippetNumberPrompt(
-					snippets.length,
-					theme,
-					keybindings as KeybindingsManager,
-					done,
-					() => tui.requestRender(),
-				),
-				{
-					overlay: true,
-					overlayOptions: {
-						anchor: "center",
-						width: 48,
-						maxHeight: 5,
-						margin: 0,
+			let selectedIndex: unknown;
+			try {
+				selectedIndex = await ctx.ui.custom<unknown>(
+					(tui, theme, keybindings, done) => new SnippetNumberPrompt(
+						snippets.length,
+						theme,
+						keybindings,
+						done,
+						() => tui.requestRender(),
+					),
+					{
+						overlay: true,
+						overlayOptions: {
+							anchor: "center",
+							width: 48,
+							maxHeight: 5,
+							margin: 0,
+						},
 					},
-				},
-			);
-			if (selectedIndex !== undefined) await copySnippet(snippets[selectedIndex]!, ctx);
+				);
+			} catch {
+				ctx.ui.notify(translate("pickerFailed"), "error");
+				return;
+			}
+			if (selectedIndex === undefined) return;
+			if (!isValidSnippetSelection(selectedIndex, snippets.length)) {
+				ctx.ui.notify(translate("invalidSelection"), "error");
+				return;
+			}
+			await copySnippet(snippets[selectedIndex], ctx);
 		} finally {
 			pickerOpen = false;
 		}
@@ -738,12 +823,18 @@ export default function betterSnippetsExtension(pi: ExtensionAPI) {
 	pi.registerCommand("copy-snippet", {
 		description: "Select and copy a fenced snippet from the latest assistant response",
 		handler: async (args, ctx) => {
+			if (!canCopy(ctx)) return;
 			const value = args.trim();
-			if (value && !/^[1-9]\d*$/.test(value)) {
-				ctx.ui.notify(translate("usage"), "error");
+			if (value) {
+				const requestedIndex = parseSnippetIndex(value);
+				if (!requestedIndex) {
+					ctx.ui.notify(`${translate("invalidIndex", { value: displayIndexDiagnostic(args) })}. ${translate("usage")}`, "error");
+					return;
+				}
+				await chooseAndCopy(ctx, requestedIndex);
 				return;
 			}
-			await chooseAndCopy(ctx, value ? Number(value) : undefined);
+			await chooseAndCopy(ctx);
 		},
 	});
 
