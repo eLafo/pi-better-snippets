@@ -13,7 +13,3 @@ All notable changes to this project are documented here. The format follows [Kee
 ### Changed
 
 - Clarified runtime requirements, installation scopes, lifecycle commands, locale selection, picker behavior, and clipboard privacy.
-
-### Planned
-
-- The first `0.1.0` release remains pending until every release gate in `RELEASING.md` is complete. No public `0.1.0` release is claimed.

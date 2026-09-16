@@ -7,7 +7,7 @@ Pi extension that renders fenced code blocks in assistant responses as syntax-hi
 ## Requirements
 
 - Node.js `>=22.19.0`.
-- Pi coding agent and Pi TUI host peers. The distributed package accepts the host peer contract (`*`); Pi coding agent/TUI `0.85.1` is the currently tested baseline. Later host versions require CI evidence and are not guaranteed by this README.
+- Pi coding agent and Pi TUI host peers. Official Pi package documentation requires the core host peer ranges to be `*`; this is a host-resolution contract, **not** a claim that every host version is compatible. Pi coding agent/TUI `0.85.1` is the enforced supported floor, and CI separately tests current registry latest. Other host versions require recorded CI evidence and are not guaranteed by this README.
 - An interactive Pi TUI session for the picker and clipboard actions. Copying is not available in print, JSON, or RPC-only use.
 
 The public Git repository and npm publication are external release gates. This repository does not claim that the public Git URL or npm package is currently available; verify availability before relying on either installation source.
@@ -115,12 +115,12 @@ Restart Pi after changing package settings. If both sources were installed, remo
 ```sh
 npm install
 npm run typecheck
-npm test
+npm run test:coverage
 npm run check
 pi -e .
 ```
 
-`npm run check` runs the typecheck and test suite. To inspect the distribution archive without creating it, run `npm pack --dry-run`. The expected npm archive is intentionally limited to the five-file distribution allowlist: `package.json`, `index.ts`, `README.md`, `LICENSE`, and `skills/copyable-snippets/SKILL.md`.
+`npm run check` enforces verifier fixtures, typechecking, coverage, the package allowlist, the reviewed lifecycle inventory, full-SHA workflow action references, and zero-vulnerability audits of both production and full dependency graphs. The coverage gate is deliberately below the measured baseline (95.02% statements, 86.37% branches, 95.49% functions, and 98.39% lines): it requires 90% statements, 80% branches, 90% functions, and 95% lines, which detects meaningful test regressions without treating small instrumentation changes as failures. To inspect the distribution archive without creating it, run `npm run verify:package`. The expected npm archive is intentionally limited to the five-file distribution allowlist: `package.json`, `index.ts`, `README.md`, `LICENSE`, and `skills/copyable-snippets/SKILL.md`. Lifecycle review details are in `LIFECYCLE-REVIEW.md` in the source repository.
 
 ## License
 

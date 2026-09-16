@@ -43,8 +43,20 @@
   },
   "scripts": {
     "test": "vitest run",
+    "test:coverage": "vitest run --coverage --coverage.thresholds.lines=95 --coverage.thresholds.functions=90 --coverage.thresholds.branches=80 --coverage.thresholds.statements=90",
     "typecheck": "tsc --noEmit",
-    "check": "npm run typecheck && npm test"
+    "verify:package": "node scripts/verify-package.mjs",
+    "verify:lifecycle": "node scripts/verify-lifecycle.mjs",
+    "verify:actions": "node scripts/verify-actions.mjs",
+    "audit:production": "node scripts/verify-audit.mjs production",
+    "audit:full": "node scripts/verify-audit.mjs full",
+    "smoke:no-dev": "node scripts/no-dev-smoke.mjs",
+    "host:load": "vitest run test/host-mode.test.ts",
+    "check": "npm run test:verifiers && npm run typecheck && npm run test:coverage && npm run verify:package && npm run verify:lifecycle && npm run verify:actions && npm run audit:production && npm run audit:full",
+    "test:verify-actions": "node scripts/test-verify-actions.mjs",
+    "test:verifiers": "npm run test:verify-actions && npm run test:verify-lifecycle && npm run test:verify-audit",
+    "test:verify-lifecycle": "node scripts/test-verify-lifecycle.mjs",
+    "test:verify-audit": "node scripts/test-verify-audit.mjs"
   },
   "peerDependencies": {
     "@earendil-works/pi-coding-agent": "*",
@@ -54,8 +66,10 @@
     "@earendil-works/pi-coding-agent": "0.85.1",
     "@earendil-works/pi-tui": "0.85.1",
     "@types/node": "22.19.19",
+    "@vitest/coverage-v8": "4.1.11",
     "typescript": "5.9.3",
-    "vitest": "4.1.9"
+    "vitest": "4.1.11",
+    "yaml": "2.9.0"
   },
   "engines": {
     "node": ">=22.19.0"
