@@ -56,7 +56,7 @@ jobs:
         env:
           RELEASE_TAG: ${{ needs.release-please.outputs.tag_name }}
         run: |
-          test "v$(node -p \"require('./package.json').version\")" = "$RELEASE_TAG"
+          test "v$(node -p 'require(\"./package.json\").version')" = "$RELEASE_TAG"
       - name: Pack and inspect release artifact
         id: package
         run: |
