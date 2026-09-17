@@ -9,6 +9,7 @@ const conflictExtensionPath = resolve(cwd, "test/fixtures/shortcut-conflict.ts")
 const headlessError = "Snippet copying is only available in the interactive TUI";
 const commonArgs = [
 	"--offline",
+	"--approve",
 	"--no-session",
 	"--no-extensions",
 	"--no-skills",
