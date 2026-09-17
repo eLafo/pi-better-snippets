@@ -26,7 +26,7 @@
     "postrestart",
     "dependencies"
   ],
-  "reviewUpdateRule": "After npm ci --ignore-scripts, this complete manifest and hasInstallScript lock inventory must exactly match every canonical lifecycle hook and implicit install case. Any added, removed, path/version/integrity/platform/hasInstallScript/script change fails until this inventory and LIFECYCLE-REVIEW.md receive explicit review.",
+  "reviewUpdateRule": "After npm ci --ignore-scripts, this complete manifest and hasInstallScript lock inventory must exactly match every canonical lifecycle hook and implicit install case. Any added, removed, path/version/integrity/platform/hasInstallScript/script change fails until this inventory receives explicit review following DEVELOPMENT.md.",
   "packages": [
     {
       "path": "node_modules/@earendil-works/pi-coding-agent",

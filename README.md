@@ -112,15 +112,7 @@ Restart Pi after changing package settings. If both sources were installed, remo
 
 ## Develop
 
-```sh
-npm install
-npm run typecheck
-npm run test:coverage
-npm run check
-pi -e .
-```
-
-`npm run check` enforces verifier fixtures, typechecking, coverage, the package allowlist, the reviewed lifecycle inventory, full-SHA workflow action references, and zero-vulnerability audits of both production and full dependency graphs. The coverage gate is deliberately below the measured baseline (95.02% statements, 86.37% branches, 95.49% functions, and 98.39% lines): it requires 90% statements, 80% branches, 90% functions, and 95% lines, which detects meaningful test regressions without treating small instrumentation changes as failures. To inspect the distribution archive without creating it, run `npm run verify:package`. The expected npm archive is intentionally limited to the five-file distribution allowlist: `package.json`, `index.ts`, `README.md`, `LICENSE`, and `skills/copyable-snippets/SKILL.md`. Lifecycle review details are in `LIFECYCLE-REVIEW.md` in the source repository.
+Source-repository maintenance instructions, including validation, dependency lifecycle review, releases, and the quality checklist, are in [`DEVELOPMENT.md`](./DEVELOPMENT.md).
 
 ## License
 

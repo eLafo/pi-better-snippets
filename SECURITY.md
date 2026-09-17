@@ -18,7 +18,7 @@ The intended private reporting URL is:
 
 <https://github.com/eLafo/pi-better-snippets/security/advisories/new>
 
-Before publication, the release owner must verify that this URL works for this repository, that GitHub private vulnerability reporting is enabled, and that a private report can be received. The verification result must be recorded in the release evidence. Do not assume the channel is operational before that gate passes.
+Before publication, the release owner must verify that this URL works for this repository, that GitHub private vulnerability reporting is enabled, and that a private report can be received. The verification result must be recorded in the release pull request description or comments, as defined in [`DEVELOPMENT.md`](./DEVELOPMENT.md). Do not assume the channel is operational before that gate passes.
 
 Do not file public issues, discussions, or pull requests containing exploit details, proof-of-concept payloads, credentials, or other information that could enable exploitation. If private reporting is not yet verifiably available, retain the details securely and use an existing private communication method already available to you, or open a public issue containing only a request for a private contact channel. Never include the vulnerability details in that public request. This project does not publish an email address here.
 
