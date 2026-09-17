@@ -6,6 +6,14 @@ const expected = [
 	"index.ts",
 	"package.json",
 	"skills/copyable-snippets/SKILL.md",
+	"src/copy-selection.ts",
+	"src/index-selection.ts",
+	"src/messages.ts",
+	"src/picker-lifecycle.ts",
+	"src/pickers.ts",
+	"src/presentation.ts",
+	"src/snippet-indicator.ts",
+	"src/snippets.ts",
 ].sort();
 const output = execFileSync("npm", ["pack", "--dry-run", "--json"], { encoding: "utf8" });
 const packages = JSON.parse(output);

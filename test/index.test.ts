@@ -16,6 +16,8 @@ vi.mock("@earendil-works/pi-coding-agent", async (importOriginal) => ({
 	highlightCode,
 }));
 
+import * as publicApi from "../index.js";
+import type { CodeSnippet } from "../index.js";
 import extension, {
 	decorateAssistantSnippets,
 	extractFencedCodeBlocks,
@@ -150,6 +152,27 @@ beforeEach(() => {
 
 afterEach(() => {
 	vi.restoreAllMocks();
+});
+
+describe("public module contract", () => {
+	it("keeps the existing entry-point exports available", () => {
+		const snippet: CodeSnippet = { code: "ok", info: "text", language: "text", startLine: 1, endLine: 3 };
+		expect(snippet.code).toBe("ok");
+		expect(Object.keys(publicApi).sort()).toEqual([
+			"SnippetNumberPrompt",
+			"SnippetPicker",
+			"TRANSLATIONS",
+			"decorateAssistantSnippets",
+			"default",
+			"extractFencedCodeBlocks",
+			"formatKeyId",
+			"latestAssistantSnippets",
+			"snippetLabel",
+			"snippetsFromAssistantMessage",
+			"translate",
+			"validateTranslations",
+		].sort());
+	});
 });
 
 describe("fenced snippet parsing", () => {

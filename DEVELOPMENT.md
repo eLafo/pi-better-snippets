@@ -24,7 +24,20 @@ Useful focused commands:
 
 `npm run check` runs verifier fixtures, typechecking, coverage, package allowlist verification, lifecycle review, action pin verification, and production and full dependency audits. Coverage thresholds are 95% lines, 90% functions, 80% branches, and 90% statements.
 
-The npm archive intentionally contains only `package.json`, `index.ts`, `README.md`, `LICENSE`, and `skills/copyable-snippets/SKILL.md`.
+The npm archive intentionally contains only `package.json`, `index.ts`, the runtime modules under `src/`, `README.md`, `LICENSE`, and `skills/copyable-snippets/SKILL.md`.
+
+## Architecture invariants
+
+Keep module boundaries aligned with these invariants; file names and internal layout may change without requiring documentation updates.
+
+- `index.ts` is the composition root. It registers Pi integration points and wires collaborators, but does not contain substantial parsing, rendering, overlay, or copy-flow implementation.
+- Assistant text and language labels are untrusted. Parsing keeps the raw snippet body separate from display data; rendering and diagnostics sanitize and bound all displayed text.
+- Clipboard writes are explicit user actions only and receive exactly the selected raw snippet body. No preview, label, fence marker, or display transformation may reach the clipboard.
+- Copy commands and shortcuts must reject or safely report use outside an interactive TUI before opening UI or copying.
+- At most one picker overlay may be active. Cancellation during lifecycle changes must hide and dispose it when possible, settle its pending operation, and never copy content.
+- All external command arguments and picker results are validated at their boundary before indexing snippets or changing state.
+- Session-derived state is refreshed from the active branch at lifecycle boundaries; teardown clears extension-owned state and widgets.
+- Runtime modules remain dependency-free unless a dependency is explicitly justified. Packaging verification must include every distributed runtime file.
 
 ## Dependency lifecycle review
 

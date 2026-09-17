@@ -29,6 +29,7 @@
   "homepage": "https://github.com/eLafo/pi-better-snippets#readme",
   "files": [
     "index.ts",
+    "src",
     "skills",
     "README.md",
     "LICENSE"
