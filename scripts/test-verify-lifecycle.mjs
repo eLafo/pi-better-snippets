@@ -56,6 +56,16 @@ function readJson(path) { return JSON.parse(readFileSync(path, "utf8")); }
 function writeJson(path, value) { writeFileSync(path, JSON.stringify(value)); }
 
 run("accepts reviewed implicit install metadata and linked workspace", () => {}, true);
+run("accepts root version changes", (root) => {
+	const manifestPath = join(root, "package.json");
+	const manifest = readJson(manifestPath);
+	manifest.version = "1.0.1";
+	writeJson(manifestPath, manifest);
+	const lockPath = join(root, "package-lock.json");
+	const lock = readJson(lockPath);
+	lock.packages[""].version = "1.0.1";
+	writeJson(lockPath, lock);
+}, true);
 run("rejects root postinstall", (root) => { const path = join(root, "package.json"); const value = readJson(path); value.scripts.postinstall = "node install.js"; writeJson(path, value); }, false);
 run("rejects root prepack", (root) => { const path = join(root, "package.json"); const value = readJson(path); value.scripts.prepack = "node pack.js"; writeJson(path, value); }, false);
 run("rejects root precheck hook", (root) => { const path = join(root, "package.json"); const value = readJson(path); value.scripts.precheck = "node precheck.js"; writeJson(path, value); }, false);

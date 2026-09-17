@@ -74,7 +74,7 @@ export function verifyLifecycle(rootDirectory = process.env.LIFECYCLE_ROOT ?? pr
 
 	const rootManifest = JSON.parse(readFileSync(rootFile("package.json"), "utf8"));
 	const actualRoot = { path: "", version: rootManifest.version, scripts: sortObject(rootManifest.scripts ?? {}) };
-	if (!review.rootPackage) fail("reviewed root package script inventory is missing"); else compare(review.rootPackage, actualRoot, "root manifest", ["path", "version", "scripts"]);
+	if (!review.rootPackage) fail("reviewed root package script inventory is missing"); else compare(review.rootPackage, actualRoot, "root manifest", ["path", "scripts"]);
 	validateLinks();
 
 	const actualFingerprints = lockFingerprints();
@@ -82,7 +82,7 @@ export function verifyLifecycle(rootDirectory = process.env.LIFECYCLE_ROOT ?? pr
 	if (actualFingerprints.length !== expectedFingerprints.length) fail(`expected ${expectedFingerprints.length} lock package fingerprints, found ${actualFingerprints.length}`);
 	for (const entry of expectedFingerprints) {
 		const found = actualFingerprints.find((candidate) => candidate.path === entry.path);
-		if (!found) fail(`reviewed lock package fingerprint is absent: ${entry.path}`); else compare(entry, found, "lock package fingerprint", ["path", "version", "integrity", "optional", "os", "cpu", "link", "resolved"]);
+		if (!found) fail(`reviewed lock package fingerprint is absent: ${entry.path}`); else compare(entry, found, "lock package fingerprint", entry.path === "" ? ["path", "integrity", "optional", "os", "cpu", "link", "resolved"] : ["path", "version", "integrity", "optional", "os", "cpu", "link", "resolved"]);
 	}
 	for (const entry of actualFingerprints) if (!expectedFingerprints.some((candidate) => candidate.path === entry.path)) fail(`unreviewed lock package fingerprint: ${entry.path}@${entry.version}`);
 
