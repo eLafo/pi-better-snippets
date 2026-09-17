@@ -32,8 +32,9 @@ function runInteractivePi(args: string[]) {
 	const commandLine = command.map((part) => JSON.stringify(part)).join(" ");
 	// Linux `script` keeps its pseudo-terminal open after Pi has started, so end
 	// the smoke test deliberately once startup output has had time to appear.
+	// Hosted runners need more than five seconds to initialize recent Pi builds.
 	const boundedCommand = process.platform === "linux"
-		? `timeout --signal=TERM --kill-after=1s 5s ${commandLine}; status=$?; test "$status" -eq 0 -o "$status" -eq 124`
+		? `timeout --signal=TERM --kill-after=1s 10s ${commandLine}; status=$?; test "$status" -eq 0 -o "$status" -eq 124`
 		: commandLine;
 	const scriptArgs = process.platform === "darwin"
 		? ["-q", "/dev/null", ...command]
