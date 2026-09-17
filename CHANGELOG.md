@@ -2,6 +2,18 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.2.0](https://github.com/eLafo/pi-better-snippets/compare/v0.1.0...v0.2.0) (2026-09-17)
+
+
+### Features
+
+* **gallery:** add package previews ([ef7d420](https://github.com/eLafo/pi-better-snippets/commit/ef7d4202843f8ce58f52672d2c54dafc3aee17e0))
+
+
+### Bug Fixes
+
+* **lifecycle:** allow release version bumps ([c6cb65b](https://github.com/eLafo/pi-better-snippets/commit/c6cb65bc0caa2097e3a5c601e5c19609e3dc0ffe))
+
 ## 0.1.0 (2026-09-17)
 
 
