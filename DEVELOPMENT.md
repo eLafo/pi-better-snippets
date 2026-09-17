@@ -54,9 +54,9 @@ When changing dependencies or the lockfile:
 
 ## Release
 
-Release Please derives versions, changelog entries, release pull requests, tags, and GitHub Releases from Conventional Commits. npm publication is a separate, explicitly authorized action.
+Release Please derives versions, changelog entries, release pull requests, tags, and GitHub Releases from Conventional Commits. When it creates a GitHub Release, the same workflow validates the immutable release tag and publishes its packed tarball to npm automatically with provenance.
 
-Before enabling Release Please, configure a repository-scoped `RELEASE_PLEASE_TOKEN` with only the permissions needed to write contents, pull requests, issues, and labels. Protect `main` with review and the CI workflow checks.
+Before enabling Release Please, configure a repository-scoped `RELEASE_PLEASE_TOKEN` with only the permissions needed to write contents, pull requests, issues, and labels. Protect `main` with review and the CI workflow checks. Configure npm Trusted Publishing for `@elafo/pi-better-snippets` with GitHub Actions as the provider, repository `eLafo/pi-better-snippets`, and workflow file `release-please.yml`. This uses the workflow's OIDC identity (`id-token: write`); do not add an npm access token as a GitHub secret.
 
 For a release:
 
@@ -69,7 +69,7 @@ For a release:
 
 Do not manually create competing tags, move a published tag, or replace a published artifact. Correct a defective release with a new SemVer version.
 
-This repository does not publish to npm automatically and stores no npm publication token. After explicit owner authorization, check out the exact release tag in a clean environment; run `npm ci --ignore-scripts` and `node scripts/verify-lifecycle.mjs`, then normal `npm ci`, `npm run verify:lifecycle`, and `npm run check`. Run `npm pack` once, inspect and hash that tarball, publish that exact tarball, and verify the npm and Git installation paths from clean Pi homes. Prefer npm Trusted Publishing over a long-lived token for any future automation.
+The publication job checks out the exact release tag in a clean environment; runs `npm ci --ignore-scripts`, lifecycle verification, normal `npm ci`, and `npm run check`; packs, lists, and hashes one tarball; then publishes that exact tarball with npm provenance. After it succeeds, verify the npm and Git installation paths from clean Pi homes. A failed publication must be corrected with a new SemVer release; never move a published tag or replace its artifact.
 
 ## Quality checklist
 

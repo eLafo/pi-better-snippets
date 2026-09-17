@@ -21,7 +21,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/eLafo/pi-better-snippets.git"
+    "url": "git+https://github.com/eLafo/pi-better-snippets.git"
   },
   "bugs": {
     "url": "https://github.com/eLafo/pi-better-snippets/issues"

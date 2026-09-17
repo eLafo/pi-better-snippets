@@ -16,9 +16,54 @@ concurrency:
 jobs:
   release-please:
     runs-on: ubuntu-latest
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
     steps:
-      - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
+      - id: release
+        uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
         with:
           token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
+
+  publish-npm:
+    needs: release-please
+    if: needs.release-please.outputs.release_created == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ needs.release-please.outputs.tag_name }}
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: "22.19.0"
+          cache: npm
+      - name: Pin npm
+        run: |
+          npm install --global --ignore-scripts npm@11.19.0
+          test "$(npm --version)" = "11.19.0"
+      - run: npm ci --ignore-scripts
+      - run: node scripts/verify-lifecycle.mjs
+      - run: npm ci
+      - run: npm run verify:lifecycle
+      - run: npm run check
+      - name: Verify release version
+        env:
+          RELEASE_TAG: ${{ needs.release-please.outputs.tag_name }}
+        run: |
+          test "v$(node -p \"require('./package.json').version\")" = "$RELEASE_TAG"
+      - name: Pack and inspect release artifact
+        id: package
+        run: |
+          TARBALL="$(npm pack --json | node -e 'let text = ""; process.stdin.on("data", chunk => text += chunk).on("end", () => console.log(JSON.parse(text)[0].filename))')"
+          test -n "$TARBALL"
+          tar -tzf "$TARBALL"
+          sha512sum "$TARBALL"
+          echo "tarball=$TARBALL" >> "$GITHUB_OUTPUT"
+      - name: Publish to npm with provenance
+        run: npm publish "${{ steps.package.outputs.tarball }}" --provenance
