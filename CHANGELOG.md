@@ -2,6 +2,13 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.2.2](https://github.com/eLafo/pi-better-snippets/compare/v0.2.1...v0.2.2) (2026-09-17)
+
+
+### Bug Fixes
+
+* **release:** pass valid JavaScript to node ([1927e7d](https://github.com/eLafo/pi-better-snippets/commit/1927e7df7078a1a988744fe4123f9f2a2978a119))
+
 ## [0.2.1](https://github.com/eLafo/pi-better-snippets/compare/v0.2.0...v0.2.1) (2026-09-17)
 
 
