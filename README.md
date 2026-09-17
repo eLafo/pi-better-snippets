@@ -4,6 +4,10 @@
 
 Pi extension that renders fenced code blocks in assistant responses as syntax-highlighted panels and lets you copy each snippet independently.
 
+![Pi TUI showing the snippet picker](https://raw.githubusercontent.com/eLafo/pi-better-snippets/main/assets/pi-better-snippets-preview.png)
+
+[Watch the real Pi TUI demo (MP4)](https://raw.githubusercontent.com/eLafo/pi-better-snippets/main/assets/pi-better-snippets-demo.mp4).
+
 ## Requirements
 
 - Node.js `>=22.19.0`.

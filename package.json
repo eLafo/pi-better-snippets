@@ -40,7 +40,9 @@
     ],
     "skills": [
       "./skills"
-    ]
+    ],
+    "image": "https://raw.githubusercontent.com/eLafo/pi-better-snippets/main/assets/pi-better-snippets-preview.png",
+    "video": "https://raw.githubusercontent.com/eLafo/pi-better-snippets/main/assets/pi-better-snippets-demo.mp4"
   },
   "scripts": {
     "test": "vitest run",
