@@ -118,6 +118,6 @@ export default function betterSnippetsExtension(pi: ExtensionAPI, locale?: strin
 	// Pi resolves shortcut conflicts after registration and exposes no result; the widget always shows /copy-snippet as a fallback.
 	pi.registerShortcut(SHORTCUT, {
 		description: translate("shortcutDescription", locale),
-		handler: async (ctx) => copySelection.quickCopyByNumber(ctx),
+		handler: async (ctx) => copySelection.quickCopy(ctx),
 	});
 }

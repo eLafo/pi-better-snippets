@@ -5,7 +5,7 @@ import { copyToClipboard, type ExtensionContext } from "@earendil-works/pi-codin
 import type { OverlayOptions, TUI } from "@earendil-works/pi-tui";
 import { isValidSnippetSelection, type RequestedSnippetIndex } from "./index-selection.js";
 import { translate } from "./messages.js";
-import { MAX_OVERLAY_HEIGHT, SnippetNumberPrompt, SnippetPicker } from "./pickers.js";
+import { MAX_OVERLAY_HEIGHT, SnippetPicker } from "./pickers.js";
 import { type PickerFactory } from "./picker-lifecycle.js";
 import { displayErrorDetail, displayIndexDiagnostic, displayLanguage } from "./presentation.js";
 import { latestAssistantSnippets, type CodeSnippet } from "./snippets.js";
@@ -22,7 +22,7 @@ export interface CopySelectionControllerOptions {
 export interface CopySelectionController {
 	canCopy(ctx: ExtensionContext): boolean;
 	chooseAndCopy(ctx: ExtensionContext, requestedIndex?: RequestedSnippetIndex): Promise<void>;
-	quickCopyByNumber(ctx: ExtensionContext): Promise<void>;
+	quickCopy(ctx: ExtensionContext): Promise<void>;
 }
 
 /**
@@ -103,35 +103,7 @@ export function createCopySelectionController(options: CopySelectionControllerOp
 		await copySnippet(snippets[selectedIndex], ctx);
 	};
 
-	const quickCopyByNumber = async (ctx: ExtensionContext) => {
-		if (options.isPickerActive() || !canCopy(ctx)) return;
-		const snippets = availableSnippets(ctx);
-		if (notifyIfEmpty(snippets, ctx)) return;
-		if (snippets.length === 1) {
-			await copySnippet(snippets[0]!, ctx);
-			return;
-		}
+	const quickCopy = async (ctx: ExtensionContext) => chooseAndCopy(ctx);
 
-		let selectedIndex: unknown;
-		try {
-			selectedIndex = await options.openPicker(
-				ctx,
-				(tui, theme, keybindings, done) => new SnippetNumberPrompt(
-					snippets.length, theme, keybindings, done, () => requestRender(tui), locale,
-				),
-				{ anchor: "center", width: 48, maxHeight: 5, margin: 0 },
-			);
-		} catch {
-			ctx.ui.notify(translate("pickerFailed", locale), "error");
-			return;
-		}
-		if (selectedIndex === undefined) return;
-		if (!isValidSnippetSelection(selectedIndex, snippets.length)) {
-			ctx.ui.notify(translate("invalidSelection", locale), "error");
-			return;
-		}
-		await copySnippet(snippets[selectedIndex], ctx);
-	};
-
-	return { canCopy, chooseAndCopy, quickCopyByNumber };
+	return { canCopy, chooseAndCopy, quickCopy };
 }
