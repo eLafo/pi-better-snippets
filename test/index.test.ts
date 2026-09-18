@@ -26,6 +26,7 @@ import extension, {
 	SnippetNumberPrompt,
 	SnippetPicker,
 	snippetLabel,
+	snippetSearchMetadata,
 	TRANSLATIONS,
 	translate,
 	validateTranslations,
@@ -164,10 +165,12 @@ describe("public module contract", () => {
 			"TRANSLATIONS",
 			"decorateAssistantSnippets",
 			"default",
+			"displaySearchQuery",
 			"extractFencedCodeBlocks",
 			"formatKeyId",
 			"latestAssistantSnippets",
 			"snippetLabel",
+			"snippetSearchMetadata",
 			"snippetsFromAssistantMessage",
 			"translate",
 			"validateTranslations",
@@ -708,6 +711,50 @@ describe("snippet picker", () => {
 
 		expect(highlightCode).toHaveBeenCalledWith(highlighted[0]!.code, "ts");
 		expect(rendered).toContain("\x1b[35mconst answer = 42;\x1b[39m");
+	});
+
+	it("filters by safe number, language, and preview metadata only after entering search mode", () => {
+		const done = vi.fn();
+		const picker = new SnippetPicker([
+			{ code: "not searchable beyond its preview\nprivate-token", info: "ts", language: "TypeScript", startLine: 1, endLine: 3 },
+			{ code: "matched preview", info: "py", language: "Python", startLine: 4, endLine: 6 },
+		], theme, keybindings as any, () => 24, done);
+		expect(picker.render(72).join("\n")).toContain("TypeScript");
+		picker.handleInput("/");
+		picker.handleInput("2");
+		expect(picker.getSelection()).toBe(1);
+		expect(picker.render(72).join("\n")).toContain("Search: 2");
+		picker.handleInput("\r");
+		expect(done).toHaveBeenCalledWith(1);
+
+		const bodyPicker = new SnippetPicker([{ code: "visible\nprivate-token", info: "ts", language: "ts", startLine: 1, endLine: 3 }], theme, keybindings as any, () => 24, vi.fn());
+		bodyPicker.handleInput("/");
+		for (const character of "private-token") bodyPicker.handleInput(character);
+		expect(bodyPicker.render(72).join("\n")).toContain("No matching snippets");
+	});
+
+	it("restores the normal list and selection when search is cleared or left", () => {
+		const picker = new SnippetPicker(snippets, theme, keybindings as any, () => 24, vi.fn());
+		picker.handleInput("\x1b[B");
+		picker.handleInput("/");
+		picker.handleInput("o");
+		expect(picker.getSelection()).toBe(0);
+		picker.handleInput("\x7f");
+		expect(picker.getSelection()).toBe(1);
+		picker.handleInput("o");
+		picker.handleInput("\x1b");
+		expect(picker.getSelection()).toBe(1);
+		expect(picker.render(72).join("\n")).toContain("2. text");
+	});
+
+	it("keeps filtered search metadata and narrow layouts terminal-safe", () => {
+		const hostile = { code: `first\x1b]8;;https://bad\x07\n${"x".repeat(500)}`, info: "\x1b[31mjs", language: "\x1b[31mjs", startLine: 1, endLine: 3 };
+		expect(snippetSearchMetadata(hostile, 0)).not.toMatch(/[\x00-\x1f\x7f]/);
+		const picker = new SnippetPicker([hostile], theme, keybindings as any, () => 8, vi.fn(), () => undefined, "es");
+		picker.handleInput("/");
+		picker.handleInput("\x1b[31m");
+		for (let width = 1; width <= 20; width++) expect(picker.render(width).every((row) => visibleWidth(row) <= width)).toBe(true);
+		expect(picker.render(60).join("\n")).toContain("Buscar:");
 	});
 
 	it("uses Tab to focus the preview and arrows to scroll it", () => {

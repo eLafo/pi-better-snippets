@@ -149,6 +149,11 @@ export function displayIndexDiagnostic(value: string): string {
 	return displayText(value, MAX_INDEX_DIAGNOSTIC_GRAPHEMES).replaceAll("\n", "↵");
 }
 
+/** Returns bounded terminal-safe text suitable for a picker search query. */
+export function displaySearchQuery(value: string): string {
+	return displayText(value, MAX_PREVIEW_GRAPHEMES).replaceAll("\n", " ");
+}
+
 /**
  * Constrains rendered terminal rows to a valid visible width.
  *
@@ -255,6 +260,16 @@ function lineCount(code: string): number {
 function preview(code: string, locale?: string): string {
 	const firstContentLine = displayText(code, MAX_DISPLAY_CODE_GRAPHEMES).split("\n").find((line) => line.trim())?.trim() || translate("emptyPreview", locale);
 	return truncateGraphemes(firstContentLine, MAX_PREVIEW_GRAPHEMES);
+}
+
+/**
+ * Builds bounded, terminal-safe metadata for picker filtering without exposing a
+ * complete snippet body.
+ *
+ * @public
+ */
+export function snippetSearchMetadata(snippet: CodeSnippet, index: number, locale?: string): string {
+	return `${index + 1} ${displayLanguage(snippet.language, locale)} ${preview(snippet.code, locale)}`;
 }
 
 /**

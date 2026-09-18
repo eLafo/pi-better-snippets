@@ -24,7 +24,7 @@ import {
 
 export { TRANSLATIONS, translate, validateTranslations } from "./src/messages.js";
 export { formatKeyId, SnippetNumberPrompt, SnippetPicker } from "./src/pickers.js";
-export { decorateAssistantSnippets, snippetLabel } from "./src/presentation.js";
+export { decorateAssistantSnippets, displaySearchQuery, snippetLabel, snippetSearchMetadata } from "./src/presentation.js";
 export {
 	extractFencedCodeBlocks,
 	latestAssistantSnippets,
