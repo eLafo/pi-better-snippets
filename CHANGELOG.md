@@ -2,6 +2,19 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.3.0](https://github.com/eLafo/pi-better-snippets/compare/v0.2.2...v0.3.0) (2026-09-18)
+
+
+### Features
+
+* add opt-in snippet picker search ([d21f921](https://github.com/eLafo/pi-better-snippets/commit/d21f921a8c4876fde2a725dfe718e4985beb203f))
+* add snippet picker search ([08060cf](https://github.com/eLafo/pi-better-snippets/commit/08060cfd5b5fb7a406618805473caac1b587c7de))
+
+
+### Bug Fixes
+
+* make picker search discoverable ([94c4fa3](https://github.com/eLafo/pi-better-snippets/commit/94c4fa31cb8a475cf3229a194b39dfbc91f4f093))
+
 ## [0.2.2](https://github.com/eLafo/pi-better-snippets/compare/v0.2.1...v0.2.2) (2026-09-17)
 
 
