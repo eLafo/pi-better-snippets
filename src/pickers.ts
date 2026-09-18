@@ -442,11 +442,14 @@ export class SnippetPicker {
 		if (selectedVisibleIndex >= this.listOffset + listRows) this.listOffset = selectedVisibleIndex - listRows + 1;
 		if (selectedVisibleIndex >= 0 && selectedVisibleIndex < this.listOffset) this.listOffset = selectedVisibleIndex;
 
+		const title = this.searchActive
+			? translate("searchQuery", { query: this.searchQuery || "…" }, this.locale)
+			: `${translate("pickerTitle", {
+				focus: translate(this.focus === "list" ? "listFocus" : "previewFocus", this.locale),
+			}, this.locale)} · /${translate("search", this.locale)}`;
 		const lines: string[] = [
 			this.theme.fg("border", `╭${"─".repeat(innerWidth)}╮`),
-			row(` ${this.theme.fg("accent", this.theme.bold(translate("pickerTitle", {
-				focus: translate(this.focus === "list" ? "listFocus" : "previewFocus", this.locale),
-			}, this.locale)))}`),
+			row(` ${this.theme.fg("accent", this.theme.bold(title))}`),
 			rule(),
 		];
 

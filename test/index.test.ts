@@ -691,6 +691,7 @@ describe("snippet picker", () => {
 		const picker = new SnippetPicker(snippets, theme, keybindings as any, () => 24, vi.fn());
 		const rendered = picker.render(72).join("\n");
 		expect(rendered).toContain("Copy snippet");
+		expect(rendered).toContain("/search");
 		expect(rendered).toContain("╭─ Preview · ts");
 		expect(rendered).toContain("one");
 		expect(rendered).toContain("╰─ Rows 1-1 of 1");

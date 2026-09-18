@@ -62,7 +62,7 @@ To update all installed packages, use `pi update --extensions`. A Git installati
 
 - `Ctrl+Shift+C`, then `1`–`9`: copies the corresponding snippet from the latest assistant response.
 - With one snippet, `Ctrl+Shift+C` copies it immediately.
-- `/copy-snippet`: opens a picker showing the snippets and a preview. The picker supports navigation, paging, selection, and cancellation. Press `/` to enter opt-in search; it filters only snippet number, language, and the bounded one-line preview. Press `Esc` to leave search and restore the normal list.
+- `/copy-snippet`: opens a picker showing the snippets and a preview. The picker supports navigation, paging, selection, and cancellation. Press `/` to enter opt-in search, type a query, then press `Esc` to leave search and restore the normal list. Search filters only snippet number, language, and the bounded one-line preview. (The `Ctrl+Shift+C` flow is a number prompt, so use `/copy-snippet` to search.)
 - `/copy-snippet <n>`: copies snippet *n*, including snippets after the ninth.
 
 `/copy-snippet` is the shortcut fallback when the key binding is unavailable or conflicts with another Pi binding.
