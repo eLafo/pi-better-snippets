@@ -16,8 +16,10 @@ import { translate, type MessageKeyWithoutArgs } from "./messages.js";
 import {
 	boundedRows,
 	displayLanguage,
+	displaySearchQuery,
 	highlightedSnippetLines,
 	snippetLabel,
+	snippetSearchMetadata,
 } from "./presentation.js";
 import type { CodeSnippet } from "./snippets.js";
 
@@ -176,6 +178,9 @@ export class SnippetPicker {
 	private previewEndRow = 0;
 	private actualListRows = 0;
 	private focus: "list" | "preview" = "list";
+	private searchActive = false;
+	private searchQuery = "";
+	private selectionBeforeSearch = 0;
 
 	/**
 	 * @param snippets - Immutable picker entries in display order.
@@ -217,14 +222,44 @@ export class SnippetPicker {
 		this.onChange();
 	}
 
+	private visibleIndices(): number[] {
+		if (!this.searchActive || !this.searchQuery) return this.snippets.map((_snippet, index) => index);
+		const query = this.searchQuery.toLocaleLowerCase(this.locale);
+		return this.snippets.flatMap((snippet, index) =>
+			snippetSearchMetadata(snippet, index, this.locale).toLocaleLowerCase(this.locale).includes(query) ? [index] : [],
+		);
+	}
+
 	private select(index: number): void {
-		const next = Math.max(0, Math.min(this.snippets.length - 1, index));
-		if (next === this.selectedIndex) return;
+		const visibleIndices = this.visibleIndices();
+		const next = visibleIndices.includes(index) ? index : visibleIndices[0];
+		if (next === undefined || next === this.selectedIndex) return;
 		this.selectedIndex = next;
 		this.previewOffset = 0;
 		this.previewTotalRows = Math.max(1, this.snippets[next]!.code.split(/\r\n|\n|\r/).length);
-		if (next < this.listOffset) this.listOffset = next;
-		if (next >= this.listOffset + MAX_VISIBLE_SNIPPETS) this.listOffset = next - MAX_VISIBLE_SNIPPETS + 1;
+		const visibleIndex = visibleIndices.indexOf(next);
+		if (visibleIndex < this.listOffset) this.listOffset = visibleIndex;
+		if (visibleIndex >= this.listOffset + MAX_VISIBLE_SNIPPETS) this.listOffset = visibleIndex - MAX_VISIBLE_SNIPPETS + 1;
+		this.onChange();
+	}
+
+	private leaveSearch(): void {
+		if (!this.searchActive) return;
+		this.searchActive = false;
+		this.searchQuery = "";
+		this.listOffset = 0;
+		this.select(this.selectionBeforeSearch);
+		this.onChange();
+	}
+
+	private updateSearch(query: string): void {
+		this.searchQuery = displaySearchQuery(query);
+		this.listOffset = 0;
+		if (!this.searchQuery) this.select(this.selectionBeforeSearch);
+		else {
+			const matches = this.visibleIndices();
+			if (matches.length && !matches.includes(this.selectedIndex)) this.select(matches[0]!);
+		}
 		this.onChange();
 	}
 
@@ -244,17 +279,32 @@ export class SnippetPicker {
 	 * @param data - Raw terminal input.
 	 */
 	handleInput(data: string): void {
-		if (this.keybindings.matches(data, "tui.select.cancel")) return this.done(undefined);
-		if (this.keybindings.matches(data, "tui.select.confirm")) return this.done(this.selectedIndex);
+		if (this.keybindings.matches(data, "tui.select.cancel")) {
+			if (this.searchActive) return this.leaveSearch();
+			return this.done(undefined);
+		}
+		if (!this.searchActive && data === "/") {
+			this.searchActive = true;
+			this.selectionBeforeSearch = this.selectedIndex;
+			this.onChange();
+			return;
+		}
+		if (this.searchActive && (data === "\x7f" || data === "\b")) return this.updateSearch(this.searchQuery.slice(0, -1));
+		if (this.searchActive && data.length === 1 && data >= " ") return this.updateSearch(this.searchQuery + data);
+		const visibleIndices = this.visibleIndices();
+		if (this.keybindings.matches(data, "tui.select.confirm")) {
+			if (visibleIndices.includes(this.selectedIndex)) this.done(this.selectedIndex);
+			return;
+		}
 		if (this.keybindings.matches(data, "tui.input.tab")) {
 			this.setFocus(this.focus === "list" ? "preview" : "list");
 			return;
 		}
 		if (this.keybindings.matches(data, "tui.select.up")) {
-			return this.focus === "list" ? this.select(this.selectedIndex - 1) : this.scrollPreview(-1);
+			return this.focus === "list" ? this.select(visibleIndices[Math.max(0, visibleIndices.indexOf(this.selectedIndex) - 1)] ?? this.selectedIndex) : this.scrollPreview(-1);
 		}
 		if (this.keybindings.matches(data, "tui.select.down")) {
-			return this.focus === "list" ? this.select(this.selectedIndex + 1) : this.scrollPreview(1);
+			return this.focus === "list" ? this.select(visibleIndices[Math.min(visibleIndices.length - 1, visibleIndices.indexOf(this.selectedIndex) + 1)] ?? this.selectedIndex) : this.scrollPreview(1);
 		}
 		if (this.keybindings.matches(data, "tui.select.pageUp")) return this.scrollPreview(-this.previewVisibleRows);
 		if (this.keybindings.matches(data, "tui.select.pageDown")) return this.scrollPreview(this.previewVisibleRows);
@@ -277,7 +327,7 @@ export class SnippetPicker {
 		if (event.type !== "click" || event.button !== "left") return undefined;
 		if (event.y >= this.listStartRow && event.y < this.listStartRow + this.actualListRows) {
 			this.setFocus("list");
-			this.select(this.listOffset + event.y - this.listStartRow);
+			this.select(this.visibleIndices()[this.listOffset + event.y - this.listStartRow] ?? this.selectedIndex);
 			if ((event.clickCount ?? 1) >= 2) this.done(this.selectedIndex);
 			return { handled: true, focus: true, render: true };
 		}
@@ -362,8 +412,11 @@ export class SnippetPicker {
 			this.previewTotalRows = visualCodeRows.length;
 			this.previewOffset = Math.min(this.previewOffset, Math.max(0, this.previewTotalRows - 1));
 			const codeRow = visualCodeRows[this.previewOffset]!;
+			const title = this.searchActive
+				? translate("searchQuery", { query: this.searchQuery || "…" }, this.locale)
+				: translate("compactTitle", this.locale);
 			return [
-				row(` ${this.theme.fg("accent", this.theme.bold(translate("compactTitle", this.locale)))} ${this.theme.fg("dim", `${this.previewOffset + 1}/${this.previewTotalRows}`)}`),
+				row(` ${this.theme.fg("accent", this.theme.bold(title))} ${this.theme.fg("dim", `${this.previewOffset + 1}/${this.previewTotalRows}`)}`),
 				row(` ${snippetLabel(selected, this.selectedIndex, this.locale)}`),
 				backgroundRow(` ${codeRow.code}`),
 				row(` ${this.theme.fg("dim", translate("compactFooter", {
@@ -374,36 +427,48 @@ export class SnippetPicker {
 			].slice(0, availableRows);
 		}
 
-		const dynamicRows = availableRows - 9;
-		const listRows = Math.min(MAX_VISIBLE_SNIPPETS, this.snippets.length, Math.max(1, Math.floor(dynamicRows / 2)));
-		const showListStatus = this.snippets.length > listRows && dynamicRows - listRows >= 2;
+		const visibleIndices = this.visibleIndices();
+		const searchRows = this.searchActive ? 1 : 0;
+		const dynamicRows = availableRows - 9 - searchRows;
+		const listRows = visibleIndices.length
+			? Math.min(MAX_VISIBLE_SNIPPETS, visibleIndices.length, Math.max(1, Math.floor(dynamicRows / 2)))
+			: 1;
+		const showListStatus = visibleIndices.length > listRows && dynamicRows - listRows >= 2;
 		this.previewVisibleRows = Math.min(
 			MAX_PREVIEW_LINES,
 			Math.max(1, dynamicRows - listRows - (showListStatus ? 1 : 0)),
 		);
-		if (this.selectedIndex >= this.listOffset + listRows) this.listOffset = this.selectedIndex - listRows + 1;
+		const selectedVisibleIndex = visibleIndices.indexOf(this.selectedIndex);
+		if (selectedVisibleIndex >= this.listOffset + listRows) this.listOffset = selectedVisibleIndex - listRows + 1;
+		if (selectedVisibleIndex >= 0 && selectedVisibleIndex < this.listOffset) this.listOffset = selectedVisibleIndex;
 
+		const title = this.searchActive
+			? translate("searchQuery", { query: this.searchQuery || "…" }, this.locale)
+			: `${translate("pickerTitle", {
+				focus: translate(this.focus === "list" ? "listFocus" : "previewFocus", this.locale),
+			}, this.locale)} · /${translate("search", this.locale)}`;
 		const lines: string[] = [
 			this.theme.fg("border", `╭${"─".repeat(innerWidth)}╮`),
-			row(` ${this.theme.fg("accent", this.theme.bold(translate("pickerTitle", {
-				focus: translate(this.focus === "list" ? "listFocus" : "previewFocus", this.locale),
-			}, this.locale)))}`),
+			row(` ${this.theme.fg("accent", this.theme.bold(title))}`),
 			rule(),
 		];
 
+		if (this.searchActive) lines.push(row(` ${this.theme.fg("dim", translate("searchQuery", { query: this.searchQuery || "…" }, this.locale))}`));
 		this.listStartRow = lines.length;
-		const visibleSnippets = this.snippets.slice(this.listOffset, this.listOffset + listRows);
-		this.actualListRows = visibleSnippets.length;
-		for (let relativeIndex = 0; relativeIndex < visibleSnippets.length; relativeIndex++) {
-			const index = this.listOffset + relativeIndex;
-			const label = snippetLabel(visibleSnippets[relativeIndex]!, index, this.locale);
+		const visibleSnippetIndices = visibleIndices.slice(this.listOffset, this.listOffset + listRows);
+		this.actualListRows = visibleSnippetIndices.length;
+		for (let relativeIndex = 0; relativeIndex < visibleSnippetIndices.length; relativeIndex++) {
+			const index = visibleSnippetIndices[relativeIndex]!;
+			const label = snippetLabel(this.snippets[index]!, index, this.locale);
 			lines.push(row(index === this.selectedIndex
 				? this.theme.bg("selectedBg", this.theme.fg("accent", ` › ${label}`))
 				: `   ${label}`));
 		}
-		if (showListStatus) {
+		if (visibleSnippetIndices.length === 0) {
+			lines.push(row(` ${this.theme.fg("dim", translate("noMatches", this.locale))}`));
+		} else if (showListStatus) {
 			lines.push(row(` ${this.theme.fg("dim", translate("rangeOf", {
-				start: this.listOffset + 1, end: this.listOffset + visibleSnippets.length, total: this.snippets.length,
+				start: this.listOffset + 1, end: this.listOffset + visibleSnippetIndices.length, total: visibleIndices.length,
 			}, this.locale))}`));
 		}
 
@@ -431,7 +496,8 @@ export class SnippetPicker {
 		}, this.locale)}`));
 		lines.push(rule());
 		const arrowAction = this.focus === "list" ? translate("select", this.locale) : translate("scroll", this.locale);
-		lines.push(row(` ${this.theme.fg("dim", `${this.keyLabel("tui.input.tab")} ${translate("focus", this.locale)} · ${this.keyLabel("tui.select.up")}/${this.keyLabel("tui.select.down")} ${arrowAction} · ${this.keyLabel("tui.select.confirm")} ${translate("copy", this.locale)} · ${this.keyLabel("tui.select.cancel")} ${translate("cancel", this.locale)}`)}`));
+		const searchHelp = this.searchActive ? translate("searchHint", this.locale) : `/${translate("search", this.locale)}`;
+		lines.push(row(` ${this.theme.fg("dim", `${this.keyLabel("tui.input.tab")} ${translate("focus", this.locale)} · ${this.keyLabel("tui.select.up")}/${this.keyLabel("tui.select.down")} ${arrowAction} · ${this.keyLabel("tui.select.confirm")} ${translate("copy", this.locale)} · ${searchHelp} · ${this.keyLabel("tui.select.cancel")} ${translate("cancel", this.locale)}`)}`));
 		lines.push(this.theme.fg("border", `╰${"─".repeat(innerWidth)}╯`));
 		return lines;
 	}

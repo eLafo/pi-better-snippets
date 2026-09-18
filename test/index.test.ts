@@ -26,6 +26,7 @@ import extension, {
 	SnippetNumberPrompt,
 	SnippetPicker,
 	snippetLabel,
+	snippetSearchMetadata,
 	TRANSLATIONS,
 	translate,
 	validateTranslations,
@@ -164,10 +165,12 @@ describe("public module contract", () => {
 			"TRANSLATIONS",
 			"decorateAssistantSnippets",
 			"default",
+			"displaySearchQuery",
 			"extractFencedCodeBlocks",
 			"formatKeyId",
 			"latestAssistantSnippets",
 			"snippetLabel",
+			"snippetSearchMetadata",
 			"snippetsFromAssistantMessage",
 			"translate",
 			"validateTranslations",
@@ -459,7 +462,7 @@ describe("localized picker UI", () => {
 		} as unknown as ExtensionAPI;
 		extension(localPi, "es-MX");
 		expect(command.description).toContain("Selecciona y copia un fragmento");
-		expect(shortcut.description).toContain("Copia un fragmento");
+		expect(shortcut.description).toContain("Abre el selector");
 
 		const ctx = createContext([entry(assistant("```ts\nuno\n```", "```json\ndos\n```"))]);
 		await command.handler("9", ctx);
@@ -688,6 +691,7 @@ describe("snippet picker", () => {
 		const picker = new SnippetPicker(snippets, theme, keybindings as any, () => 24, vi.fn());
 		const rendered = picker.render(72).join("\n");
 		expect(rendered).toContain("Copy snippet");
+		expect(rendered).toContain("/search");
 		expect(rendered).toContain("╭─ Preview · ts");
 		expect(rendered).toContain("one");
 		expect(rendered).toContain("╰─ Rows 1-1 of 1");
@@ -708,6 +712,50 @@ describe("snippet picker", () => {
 
 		expect(highlightCode).toHaveBeenCalledWith(highlighted[0]!.code, "ts");
 		expect(rendered).toContain("\x1b[35mconst answer = 42;\x1b[39m");
+	});
+
+	it("filters by safe number, language, and preview metadata only after entering search mode", () => {
+		const done = vi.fn();
+		const picker = new SnippetPicker([
+			{ code: "not searchable beyond its preview\nprivate-token", info: "ts", language: "TypeScript", startLine: 1, endLine: 3 },
+			{ code: "matched preview", info: "py", language: "Python", startLine: 4, endLine: 6 },
+		], theme, keybindings as any, () => 24, done);
+		expect(picker.render(72).join("\n")).toContain("TypeScript");
+		picker.handleInput("/");
+		picker.handleInput("2");
+		expect(picker.getSelection()).toBe(1);
+		expect(picker.render(72).join("\n")).toContain("Search: 2");
+		picker.handleInput("\r");
+		expect(done).toHaveBeenCalledWith(1);
+
+		const bodyPicker = new SnippetPicker([{ code: "visible\nprivate-token", info: "ts", language: "ts", startLine: 1, endLine: 3 }], theme, keybindings as any, () => 24, vi.fn());
+		bodyPicker.handleInput("/");
+		for (const character of "private-token") bodyPicker.handleInput(character);
+		expect(bodyPicker.render(72).join("\n")).toContain("No matching snippets");
+	});
+
+	it("restores the normal list and selection when search is cleared or left", () => {
+		const picker = new SnippetPicker(snippets, theme, keybindings as any, () => 24, vi.fn());
+		picker.handleInput("\x1b[B");
+		picker.handleInput("/");
+		picker.handleInput("o");
+		expect(picker.getSelection()).toBe(0);
+		picker.handleInput("\x7f");
+		expect(picker.getSelection()).toBe(1);
+		picker.handleInput("o");
+		picker.handleInput("\x1b");
+		expect(picker.getSelection()).toBe(1);
+		expect(picker.render(72).join("\n")).toContain("2. text");
+	});
+
+	it("keeps filtered search metadata and narrow layouts terminal-safe", () => {
+		const hostile = { code: `first\x1b]8;;https://bad\x07\n${"x".repeat(500)}`, info: "\x1b[31mjs", language: "\x1b[31mjs", startLine: 1, endLine: 3 };
+		expect(snippetSearchMetadata(hostile, 0)).not.toMatch(/[\x00-\x1f\x7f]/);
+		const picker = new SnippetPicker([hostile], theme, keybindings as any, () => 8, vi.fn(), () => undefined, "es");
+		picker.handleInput("/");
+		picker.handleInput("\x1b[31m");
+		for (let width = 1; width <= 20; width++) expect(picker.render(width).every((row) => visibleWidth(row) <= width)).toBe(true);
+		expect(picker.render(60).join("\n")).toContain("Buscar:");
 	});
 
 	it("uses Tab to focus the preview and arrows to scroll it", () => {
@@ -878,7 +926,7 @@ describe("extension integration", () => {
 		expect(ctx.ui.notify).toHaveBeenCalledWith("Copied ts snippet to the clipboard", "info");
 	});
 
-	it("copies the pressed snippet number from the quick prompt", async () => {
+	it("opens the same full picker from the shortcut", async () => {
 		const ctx = createContext([entry(assistant("```ts\none\n```\n```json\ntwo\n```"))]);
 		ctx.ui.custom.mockResolvedValueOnce(1);
 		await shortcuts.get("ctrl+shift+c")!.handler(ctx);
@@ -887,7 +935,7 @@ describe("extension integration", () => {
 			expect.any(Function),
 			expect.objectContaining({
 				overlay: true,
-				overlayOptions: expect.objectContaining({ width: 48 }),
+				overlayOptions: expect.objectContaining({ width: "90%" }),
 			}),
 		);
 
@@ -895,11 +943,11 @@ describe("extension integration", () => {
 		expect(copyToClipboard).toHaveBeenLastCalledWith("one");
 	});
 
-	it("copies a sole snippet immediately without opening the prompt", async () => {
+	it("opens the picker for a sole snippet from the shortcut", async () => {
 		const ctx = createContext([entry(assistant("```ts\none\n```"))]);
 		await shortcuts.get("ctrl+shift+c")!.handler(ctx);
 		expect(copyToClipboard).toHaveBeenCalledWith("one");
-		expect(ctx.ui.custom).not.toHaveBeenCalled();
+		expect(ctx.ui.custom).toHaveBeenCalledWith(expect.any(Function), expect.objectContaining({ overlay: true }));
 	});
 
 	it("preserves hostile snippet bodies exactly for clipboard copying while sanitizing notifications", async () => {
@@ -1008,7 +1056,7 @@ describe("extension integration", () => {
 			registerMarkdownTransformer: () => undefined,
 		} as unknown as ExtensionAPI;
 		extension(localPi, "en");
-		expect(registered).toEqual([{ key: "ctrl+shift+c", description: "Copy a fenced snippet by pressing its number; /copy-snippet is always available" }]);
+		expect(registered).toEqual([{ key: "ctrl+shift+c", description: "Open the fenced snippet picker; /copy-snippet is always available" }]);
 		const ctx = createContext([entry(assistant("```ts\nfallback\n```"))]);
 		await command.handler("1", ctx);
 		expect(copyToClipboard).toHaveBeenLastCalledWith("fallback");
@@ -1143,7 +1191,7 @@ describe("extension integration", () => {
 	it("contains deferred shortcut prompt rendering failures and recovers after cancellation", async () => {
 		const ctx = createContext([entry(assistant("```ts\none\n```\n```json\ntwo\n```"))]);
 		const shortcut = shortcuts.get("ctrl+shift+c")!;
-		let installed!: SnippetNumberPrompt;
+		let installed!: SnippetPicker;
 		ctx.ui.custom.mockImplementationOnce((factory: any) => new Promise((resolve) => {
 			installed = factory(
 				{ requestRender: vi.fn(), terminal: { rows: 30 } },
@@ -1161,7 +1209,7 @@ describe("extension integration", () => {
 		const pending = shortcut.handler(ctx);
 		await vi.waitFor(() => expect(ctx.ui.custom).toHaveBeenCalledOnce());
 		const fallback = installed.render(80);
-		expect(fallback.join("\n")).toContain("Snippet number picker unavailable. Press Esc to cancel");
+		expect(fallback.join("\n")).toContain("Snippet preview unavailable. Press Esc to cancel");
 		expect(fallback.every((row) => visibleWidth(row) <= 80 && !row.includes("\x1b"))).toBe(true);
 		installed.handleInput("\x1b");
 		await pending;
@@ -1207,13 +1255,13 @@ describe("extension integration", () => {
 		const factory = ctx.ui.setWidget.mock.calls.at(-1)![1];
 		const dim = vi.fn((_color: string, text: string) => `<dim>${text}</dim>`);
 		const component = factory({}, { fg: dim });
-		expect(component.render(80)).toEqual(["<dim>2 snippets · ctrl+shift+c → number · /copy-snippet fallback</dim>"]);
-		expect(dim).toHaveBeenCalledWith("dim", "2 snippets · ctrl+shift+c → number · /copy-snippet fallback");
+		expect(component.render(80)).toEqual(["<dim>2 snippets · ctrl+shift+c picker · /copy-snippet fallback</dim>"]);
+		expect(dim).toHaveBeenCalledWith("dim", "2 snippets · ctrl+shift+c picker · /copy-snippet fallback");
 
 		await emit("message_end", { message: assistant("```bash\necho ok\n```") }, ctx);
 		const singularFactory = ctx.ui.setWidget.mock.calls.at(-1)![1];
 		expect(singularFactory({}, { fg: dim }).render(80))
-			.toEqual(["<dim>1 snippet · ctrl+shift+c copy · /copy-snippet fallback</dim>"]);
+			.toEqual(["<dim>1 snippet · ctrl+shift+c picker · /copy-snippet fallback</dim>"]);
 
 		await emit("message_end", { message: assistant("No snippets") }, ctx);
 		expect(ctx.ui.setWidget).toHaveBeenLastCalledWith("better-snippets", undefined);

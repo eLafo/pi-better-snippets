@@ -24,7 +24,7 @@ import {
 
 export { TRANSLATIONS, translate, validateTranslations } from "./src/messages.js";
 export { formatKeyId, SnippetNumberPrompt, SnippetPicker } from "./src/pickers.js";
-export { decorateAssistantSnippets, snippetLabel } from "./src/presentation.js";
+export { decorateAssistantSnippets, displaySearchQuery, snippetLabel, snippetSearchMetadata } from "./src/presentation.js";
 export {
 	extractFencedCodeBlocks,
 	latestAssistantSnippets,
@@ -118,6 +118,6 @@ export default function betterSnippetsExtension(pi: ExtensionAPI, locale?: strin
 	// Pi resolves shortcut conflicts after registration and exposes no result; the widget always shows /copy-snippet as a fallback.
 	pi.registerShortcut(SHORTCUT, {
 		description: translate("shortcutDescription", locale),
-		handler: async (ctx) => copySelection.quickCopyByNumber(ctx),
+		handler: async (ctx) => copySelection.quickCopy(ctx),
 	});
 }
